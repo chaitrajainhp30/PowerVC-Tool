@@ -35,29 +35,17 @@ done
 
 set -euo pipefail
 
-if ! hash PowerVC-Create-Cluster 1>/dev/null 2>&1
-then
-	echo "Error: Missing PowerVC-Create-Cluster program!"
-	exit 1
-fi
-
-if ! hash openshift-install 1>/dev/null 2>&1
-then
-	echo "Error: Missing openshift-install program!"
-	exit 1
-fi
-
-if ! hash openstack 1>/dev/null 2>&1
-then
-	echo "Error: Missing openstack program!"
-	exit 1
-fi
-
-if ! hash jq 1>/dev/null 2>&1
-then
-	echo "Error: Missing jq program!"
-	exit 1
-fi
+declare -a PROGRAMS
+PROGRAMS=( PowerVC-Tool openshift-install openstack jq )
+for PROGRAM in ${PROGRAMS[@]}
+do
+	echo "Checking for program ${PROGRAM}"
+	if ! hash ${PROGRAM} 1>/dev/null 2>&1
+	then
+		echo "Error: Missing ${PROGRAM} program!"
+		exit 1
+	fi
+done
 
 if ! openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell > /dev/null 2>&1
 then
@@ -94,7 +82,7 @@ then
 fi
 PULL_SECRET=$(cat ~/.pullSecretCompact)
 
-PowerVC-Create-Cluster \
+PowerVC-Tool \
 	create-bastion \
 	--cloud "${CLOUD}" \
 	--bastionName "${CLUSTER_NAME}" \
