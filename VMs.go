@@ -115,13 +115,31 @@ func (vms *VMs) ClusterStatus() {
 	fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
 
 	for _, server = range allServers {
+		var (
+			macAddress string
+			ipAddress  string
+		)
+
 		if !strings.HasPrefix(strings.ToLower(server.Name), infraID) {
 			log.Debugf("ClusterStatus: SKIPPING server = %s", server.Name)
 			continue
 		}
 		log.Debugf("ClusterStatus: FOUND    server = %s", server.Name)
 
-		fmt.Printf("%s: %s has status (%s) and power state (%s)\n", VMsName, server.Name, server.Status, server.PowerState.String())
+		macAddress, ipAddress, err = findIpAddress(server)
+		if err != nil {
+			log.Debugf("ClusterStatus: findIpAddress received error %v", err)
+			continue
+		}
+
+		fmt.Printf("%s: %s has status (%s), power state (%s), MAC address (%s), and IP address (%s)\n",
+			VMsName,
+			server.Name,
+			server.Status,
+			server.PowerState.String(),
+			macAddress,
+			ipAddress,
+		)
 	}
 }
 

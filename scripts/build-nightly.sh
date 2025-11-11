@@ -92,7 +92,7 @@ fi
 echo "8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------"
 
 declare -a PROGRAMS
-PROGRAMS=( git go oc patch tar )
+PROGRAMS=( git go make oc patch tar zip )
 for PROGRAM in ${PROGRAMS[@]}
 do
 	echo "Checking for program ${PROGRAM}"
@@ -142,7 +142,7 @@ patch -p1 < /home/OpenShift/PowerVC/0001-PowerVC-Add-new-platform-for-PowerVC-20
 patch -p1 < /home/OpenShift/PowerVC/0002-PowerVC-Do-not-use-Security-Groups-2025-11-01.patch
 patch -p1 < /home/OpenShift/PowerVC/0003-PowerVC-Does-not-support-OpenStack-Load-Balancers-2025-11-01.patch
 patch -p1 < /home/OpenShift/PowerVC/0004-PowerVC-Allow-bootstrap-ignition-upload-to-Swift-2025-11-01.patch
-patch -p1 < /home/OpenShift/PowerVC/0001-PowerVC-Validate-Manual-Load-Balancer-2025-11-03.patch
+#patch -p1 < /home/OpenShift/PowerVC/0001-PowerVC-Validate-Manual-Load-Balancer-2025-11-03.patch
 
 echo "8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------"
 echo "Building"
