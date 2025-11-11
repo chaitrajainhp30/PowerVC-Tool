@@ -5,12 +5,13 @@ go 1.25.1
 require (
 	github.com/IBM-Cloud/bluemix-go v0.0.0-20251001005609-37dbcddbe871
 	github.com/IBM/go-sdk-core/v5 v5.21.0
-	github.com/IBM/networking-go-sdk v0.51.13
+	github.com/IBM/networking-go-sdk v0.51.14
 	github.com/IBM/platform-services-go-sdk v0.90.0
+	github.com/coreos/ignition/v2 v2.24.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/gophercloud/gophercloud/v2 v2.8.0
 	github.com/gophercloud/utils/v2 v2.0.0-20251103115625-7dba497d90f8
-	github.com/openshift/api v0.0.0-20251104141128-d13e8c65d30f
+	github.com/openshift/api v0.0.0-20251111123023-80d1f5cc22f4
 	github.com/sirupsen/logrus v1.9.3
 	k8s.io/apimachinery v0.34.1
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
@@ -19,6 +20,9 @@ require (
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
+	github.com/coreos/go-semver v0.3.1 // indirect
+	github.com/coreos/go-systemd/v22 v22.6.0 // indirect
+	github.com/coreos/vcontext v0.0.0-20230201181013-d72178a18687 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -38,13 +42,14 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/vincent-petithory/dataurl v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.mongodb.org/mongo-driver v1.17.3 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/crypto v0.41.0 // indirect
-	golang.org/x/net v0.43.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/net v0.46.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.34.1 // indirect

@@ -53,6 +53,7 @@ func main() {
 		executableName          string
 		createBastionFlags      *flag.FlagSet
 		createClusterFlags      *flag.FlagSet
+		createRhcosFlags        *flag.FlagSet
 		watchInstallationFlags  *flag.FlagSet
 		watchCreateClusterFlags *flag.FlagSet
 		err                     error
@@ -76,6 +77,7 @@ func main() {
 
 	createBastionFlags = flag.NewFlagSet("create-bastion", flag.ExitOnError)
 	createClusterFlags = flag.NewFlagSet("create-cluster", flag.ExitOnError)
+	createRhcosFlags = flag.NewFlagSet("create-rhcos", flag.ExitOnError)
 	watchInstallationFlags = flag.NewFlagSet("watch-cluster", flag.ExitOnError)
 	watchCreateClusterFlags = flag.NewFlagSet("watch-create", flag.ExitOnError)
 
@@ -85,6 +87,9 @@ func main() {
 
 	case "create-cluster":
 		err = createClusterCommand(createClusterFlags, os.Args[2:])
+
+	case "create-rhcos":
+		err = createRhcosCommand(createRhcosFlags, os.Args[2:])
 
 	case "watch-installation":
 		err = watchInstallationCommand(watchInstallationFlags, os.Args[2:])

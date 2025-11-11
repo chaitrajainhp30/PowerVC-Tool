@@ -146,6 +146,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 				*ptrSshKeyName,
 				*ptrBastionName,
 				*ptrDomainName,
+				nil,
 			)
 			if err != nil {
 				return err
@@ -162,7 +163,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		}
 	}
 
-	err = setupServer(ctx, *ptrCloud, foundServer)
+	err = setupBastionServer(ctx, *ptrCloud, foundServer)
 	if err != nil {
 		return err
 	}
@@ -179,7 +180,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 	return err
 }
 
-func createServer(ctx context.Context, cloudName string, flavorName string, imageName string, networkName string, sshKeyName string, bastionName string, domainName string) error {
+func createServer(ctx context.Context, cloudName string, flavorName string, imageName string, networkName string, sshKeyName string, bastionName string, domainName string, userData []byte) error {
 	var (
 		flavor           flavors.Flavor
 		image            images.Image
@@ -211,9 +212,11 @@ func createServer(ctx context.Context, cloudName string, flavorName string, imag
 	}
 	log.Debugf("network = %+v", network)
 
-	sshKeyPair, err = findKeyPair(ctx, cloudName, sshKeyName)
-	if err != nil {
-		return err
+	if sshKeyName != "" {
+		sshKeyPair, err = findKeyPair(ctx, cloudName, sshKeyName)
+		if err != nil {
+			return err
+		}
 	}
 
 	connNetwork, err := NewServiceClient(ctx, "network", DefaultClientOpts(cloudName))
@@ -259,7 +262,7 @@ func createServer(ctx context.Context, cloudName string, flavorName string, imag
 		ImageRef:         image.ID,
 		Name:             bastionName,
 		Networks:         portList,
-		UserData:         nil,
+		UserData:         userData,
 		// Additional properties are not allowed ('tags' was unexpected)
 //		Tags:             tags[:],
 //              KeyName:          "",
@@ -270,14 +273,17 @@ func createServer(ctx context.Context, cloudName string, flavorName string, imag
 	}
 	log.Debugf("serverCreateOpts = %+v\n", serverCreateOpts)
 
-//	newServer, err = servers.Create(ctx, connCompute, serverCreateOpts, nil).Extract()
-	newServer, err = servers.Create(ctx,
-		connCompute,
-		keypairs.CreateOptsExt{
-			CreateOptsBuilder: serverCreateOpts,
-			KeyName:           sshKeyPair.Name,
-		},
-		nil).Extract()
+	if sshKeyName != "" {
+		newServer, err = servers.Create(ctx,
+			connCompute,
+			keypairs.CreateOptsExt{
+				CreateOptsBuilder: serverCreateOpts,
+				KeyName:           sshKeyPair.Name,
+			},
+			nil).Extract()
+	} else {
+		newServer, err = servers.Create(ctx, connCompute, serverCreateOpts, nil).Extract()
+	}
 	if err != nil {
 		return err
 	}
@@ -292,7 +298,7 @@ func createServer(ctx context.Context, cloudName string, flavorName string, imag
 	return err
 }
 
-func setupServer(ctx context.Context, cloudName string, server servers.Server) error {
+func setupBastionServer(ctx context.Context, cloudName string, server servers.Server) error {
 	var (
 		ipAddress    string
 		homeDir      string
@@ -303,7 +309,7 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		err          error
 	)
 
-	log.Debugf("setupServer: server = %+v", server)
+	log.Debugf("setupBastionServer: server = %+v", server)
 
 	_, ipAddress, err = findIpAddress(server)
 	if err != nil {
@@ -313,16 +319,16 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		return fmt.Errorf("ip address is empty for server %s", server.Name)
 	}
 
-	log.Debugf("setupServer: ipAddress = %s", ipAddress)
+	log.Debugf("setupBastionServer: ipAddress = %s", ipAddress)
 
 	homeDir, err = os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	log.Debugf("setupServer: homeDir = %s", homeDir)
+	log.Debugf("setupBastionServer: homeDir = %s", homeDir)
 
 	installerRsa = path.Join(homeDir, ".ssh/id_installer_rsa")
-	log.Debugf("setupServer: installerRsa = %s", installerRsa)
+	log.Debugf("setupBastionServer: installerRsa = %s", installerRsa)
 
 	outb, err = runSplitCommand2([]string{
 		"ssh-keygen",
@@ -331,11 +337,11 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		ipAddress,
 	})
 	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupServer: outs = \"%s\"", outs)
+	log.Debugf("setupBastionServer: outs = \"%s\"", outs)
 	if errors.As(err, &exitError) {
-		log.Debugf("setupServer: exitError.ExitCode() = %+v\n", exitError.ExitCode())
+		log.Debugf("setupBastionServer: exitError.ExitCode() = %+v\n", exitError.ExitCode())
 
-		log.Debugf("setupServer: %v", exitError.ExitCode() == 1)
+		log.Debugf("setupBastionServer: %v", exitError.ExitCode() == 1)
 		if exitError.ExitCode() == 1 {
 
 			outb, err = keyscanServer(ctx, ipAddress)
@@ -344,7 +350,7 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 			}
 
 			knownHosts := path.Join(homeDir, ".ssh/known_hosts")
-			log.Debugf("setupServer: knownHosts = %s", knownHosts)
+			log.Debugf("setupBastionServer: knownHosts = %s", knownHosts)
 
 			fileKnownHosts, err := os.OpenFile(knownHosts, os.O_APPEND|os.O_RDWR, 0644)
 			if err != nil {
@@ -354,7 +360,7 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 			fileKnownHosts.Write(outb)
 
 			defer fileKnownHosts.Close()
-			}
+		}
 	}
 
 	fmt.Printf("Setting up server %s...\n", server.Name)
@@ -369,9 +375,9 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		"haproxy",
 	})
 	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupServer: outs = \"%s\"", outs)
+	log.Debugf("setupBastionServer: outs = \"%s\"", outs)
 	if errors.As(err, &exitError) {
-		log.Debugf("setupServer: exitError.ExitCode() = %+v\n", exitError.ExitCode())
+		log.Debugf("setupBastionServer: exitError.ExitCode() = %+v\n", exitError.ExitCode())
 
 		if exitError.ExitCode() == 1 && outs == "package haproxy is not installed" {
 			outb, err = runSplitCommand2([]string{
@@ -386,11 +392,11 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 				"haproxy",
 			})
 			outs = strings.TrimSpace(string(outb))
-			log.Debugf("setupServer: outs = %s", outs)
-			log.Debugf("setupServer: err = %+v", err)
+			log.Debugf("setupBastionServer: outs = %s", outs)
+			log.Debugf("setupBastionServer: err = %+v", err)
 		}
 	} else if err != nil {
-		log.Debugf("setupServer: err = %+v", err)
+		log.Debugf("setupBastionServer: err = %+v", err)
 		return err
 	}
 
@@ -406,9 +412,9 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		"/etc/haproxy/haproxy.cfg",
 	})
 	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupServer: outb = \"%s\"", outs)
+	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
 	if err != nil {
-		log.Debugf("setupServer: err = %+v", err)
+		log.Debugf("setupBastionServer: err = %+v", err)
 		return err
 	}
 	if outs != "646" {
@@ -423,9 +429,9 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 			"/etc/haproxy/haproxy.cfg",
 		})
 		outs = strings.TrimSpace(string(outb))
-		log.Debugf("setupServer: outb = \"%s\"", outs)
+		log.Debugf("setupBastionServer: outb = \"%s\"", outs)
 		if err != nil {
-			log.Debugf("setupServer: err = %+v", err)
+			log.Debugf("setupBastionServer: err = %+v", err)
 			return err
 		}
 	}
@@ -440,9 +446,9 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		"haproxy_connect_any",
 	})
 	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupServer: outb = \"%s\"", outs)
+	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
 	if err != nil {
-		log.Debugf("setupServer: err = %+v", err)
+		log.Debugf("setupBastionServer: err = %+v", err)
 		return err
 	}
 	if outs != "haproxy_connect_any --> on" {
@@ -457,9 +463,9 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 			"haproxy_connect_any=1",
 		})
 		outs = strings.TrimSpace(string(outb))
-		log.Debugf("setupServer: outb = \"%s\"", outs)
+		log.Debugf("setupBastionServer: outb = \"%s\"", outs)
 		if err != nil {
-			log.Debugf("setupServer: err = %+v", err)
+			log.Debugf("setupBastionServer: err = %+v", err)
 			return err
 		}
 	}
@@ -484,9 +490,9 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		"haproxy.service",
 	})
 	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupServer: outb = \"%s\"", outs)
+	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
 	if err != nil {
-		log.Debugf("setupServer: err = %+v", err)
+		log.Debugf("setupBastionServer: err = %+v", err)
 		return err
 	}
 
@@ -501,9 +507,9 @@ func setupServer(ctx context.Context, cloudName string, server servers.Server) e
 		"haproxy.service",
 	})
 	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupServer: outb = \"%s\"", outs)
+	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
 	if err != nil {
-		log.Debugf("setupServer: err = %+v", err)
+		log.Debugf("setupBastionServer: err = %+v", err)
 		return err
 	}
 
