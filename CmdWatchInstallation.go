@@ -81,7 +81,9 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		bastionMetadatas    stringArray
 		ptrBastionUsername  *string
 		ptrInstallerRsa     *string
+		ptrEnableDhcpd      *string
 		ptrShouldDebug      *string
+		enableDhcpd         = false
 		ctx                 context.Context
 		cancel              context.CancelFunc
 		connCompute         *gophercloud.ServiceClient
@@ -105,6 +107,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	watchInstallationFlags.Var(&bastionMetadatas, "bastionMetadata", "A list of bastion names (can be specified multiple times)")
 	ptrBastionUsername = watchInstallationFlags.String("bastionUsername", "", "The username of the bastion VM to use")
 	ptrInstallerRsa = watchInstallationFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
+	ptrEnableDhcpd = watchInstallationFlags.String("enableDhcpd", "false", "Should enable the dhcpd server")
 	ptrShouldDebug = watchInstallationFlags.String("shouldDebug", "false", "Should output debug output")
 
 	watchInstallationFlags.Parse(args)
@@ -125,8 +128,14 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		return fmt.Errorf("Error: --bastionRsa not specified")
 	}
 
-	ctx, cancel = context.WithTimeout(context.TODO(), 15*time.Minute)
-	defer cancel()
+	switch strings.ToLower(*ptrEnableDhcpd) {
+	case "true":
+		enableDhcpd = true
+	case "false":
+		enableDhcpd = false
+	default:
+		return fmt.Errorf("Error: enableDhcpd is not true/false (%s)\n", *ptrShouldDebug)
+	}
 
 	switch strings.ToLower(*ptrShouldDebug) {
 	case "true":
@@ -149,6 +158,9 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	}
 
 	fmt.Fprintf(os.Stderr, "Program version is %v, release = %v\n", version, release)
+
+	ctx, cancel = context.WithTimeout(context.TODO(), 15*time.Minute)
+	defer cancel()
 
 	connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(*ptrCloud))
 	if err != nil {
@@ -206,30 +218,32 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 		fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
 
-		filename := "/tmp/dhcpd.conf"
-		err = dhcpdConf(ctx, filename, *ptrCloud, *ptrDomainName)
-		if err != nil {
-			return err
-		}
+		if enableDhcpd {
+			filename := "/tmp/dhcpd.conf"
+			err = dhcpdConf(ctx, filename, *ptrCloud, *ptrDomainName)
+			if err != nil {
+				return err
+			}
 
-		err = runSplitCommand([]string{
-			"sudo",
-			"/usr/bin/cp",
-			filename,
-			"/etc/dhcp/dhcpd.conf",
-		})
-		if err != nil {
-			return err
-		}
+			err = runSplitCommand([]string{
+				"sudo",
+				"/usr/bin/cp",
+				filename,
+				"/etc/dhcp/dhcpd.conf",
+			})
+			if err != nil {
+				return err
+			}
 
-		err = runSplitCommand([]string{
-			"sudo",
-			"systemctl",
-			"restart",
-			"dhcpd.service",
-		})
-		if err != nil {
-			return err
+			err = runSplitCommand([]string{
+				"sudo",
+				"systemctl",
+				"restart",
+				"dhcpd.service",
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
@@ -386,7 +400,7 @@ func getAllServers(ctx context.Context, connCompute *gophercloud.ServiceClient) 
 	)
 
 	backoff := wait.Backoff{
-		Duration: 15 * time.Second,
+		Duration: 30 * time.Minute,
 		Factor:   1.1,
 		Cap:      leftInContext(ctx),
 		Steps:    math.MaxInt32,
