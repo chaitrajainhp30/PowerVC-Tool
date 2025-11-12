@@ -83,7 +83,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		ptrInstallerRsa     *string
 		ptrEnableDhcpd      *string
 		ptrShouldDebug      *string
-		enableDhcpd         = false
+		enableDhcpd         = ""
 		ctx                 context.Context
 		cancel              context.CancelFunc
 		connCompute         *gophercloud.ServiceClient
@@ -97,10 +97,6 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	)
 
 	apiKey = os.Getenv("IBMCLOUD_API_KEY")
-	if len(apiKey) == 0 {
-		fmt.Println("Error: Environment variable IBMCLOUD_API_KEY does not exist")
-		os.Exit(1)
-	}
 
 	ptrCloud = watchInstallationFlags.String("cloud", "", "The cloud to use in clouds.yaml")
 	ptrDomainName = watchInstallationFlags.String("domainName", "", "The DNS domain to use")
@@ -129,12 +125,14 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	}
 
 	switch strings.ToLower(*ptrEnableDhcpd) {
-	case "true":
-		enableDhcpd = true
+	case "HACK1":
+		enableDhcpd = *ptrEnableDhcpd
+	case "HACK2":
+		enableDhcpd = *ptrEnableDhcpd
 	case "false":
-		enableDhcpd = false
+		enableDhcpd = ""
 	default:
-		return fmt.Errorf("Error: enableDhcpd is not true/false (%s)\n", *ptrShouldDebug)
+		return fmt.Errorf("Error: enableDhcpd is not HACK[12]/false (%s)\n", *ptrShouldDebug)
 	}
 
 	switch strings.ToLower(*ptrShouldDebug) {
@@ -218,9 +216,9 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 		fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
 
-		if enableDhcpd {
+		if enableDhcpd != "" {
 			filename := "/tmp/dhcpd.conf"
-			err = dhcpdConf(ctx, filename, *ptrCloud, *ptrDomainName, "HACK2")
+			err = dhcpdConf(ctx, filename, *ptrCloud, *ptrDomainName, enableDhcpd)
 			if err != nil {
 				return err
 			}
@@ -564,7 +562,9 @@ func dhcpdConf(ctx context.Context, filename string, cloud string, domainName st
 
 	err = os.Remove(filename)
 	if err != nil {
-		return err
+		if !strings.HasSuffix(err.Error(), "no such file or directory") {
+			return err
+		}
 	}
 
 	file, err = os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0644)
@@ -647,6 +647,12 @@ func haproxyCfg(ctx context.Context, cloud string, bastionInformations []bastion
 	}
 //	log.Debugf("haproxyCfg: allServers = %+v", allServers)
 
+	log.Debugf("haproxyCfg: len(bastionInformations) = %d", len(bastionInformations))
+	if len(bastionInformations) == 0 {
+		fmt.Printf("Warning: no bastion servers found!")
+		return nil
+	}
+
 	for _, bastionInformation := range bastionInformations {
 		var (
 			file        *os.File
@@ -665,7 +671,9 @@ func haproxyCfg(ctx context.Context, cloud string, bastionInformations []bastion
 
 		err = os.Remove(filename)
 		if err != nil {
-			return err
+			if !strings.HasSuffix(err.Error(), "no such file or directory") {
+				return err
+			}
 		}
 
 		file, err = os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0644)
@@ -845,6 +853,11 @@ func dnsRecords(ctx context.Context, cloud string, apiKey string, domainName str
 		clusterName   string
 		err           error
 	)
+
+	if apiKey == "" {
+		log.Debugf("dnsRecords: WARNING: apiKey not specified, aborting!")
+		return nil
+	}
 
 	cisServiceID, _, err = getServiceInfo(ctx, apiKey, "internet-svcs", "")
 	if err != nil {
