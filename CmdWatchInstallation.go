@@ -81,6 +81,10 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		bastionMetadatas    stringArray
 		ptrBastionUsername  *string
 		ptrInstallerRsa     *string
+		ptrDhcpSubnet       *string
+		ptrDhcpNetmask      *string
+		ptrDhcpRouter       *string
+		ptrDhcpDnsServers   *string
 		ptrEnableDhcpd      *string
 		ptrShouldDebug      *string
 		enableDhcpd         = ""
@@ -104,6 +108,10 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	ptrBastionUsername = watchInstallationFlags.String("bastionUsername", "", "The username of the bastion VM to use")
 	ptrInstallerRsa = watchInstallationFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
 	ptrEnableDhcpd = watchInstallationFlags.String("enableDhcpd", "false", "Should enable the dhcpd server")
+	ptrDhcpSubnet = watchInstallationFlags.String("dhcpSubnet", "", "The subnet for a DHCP request")
+	ptrDhcpNetmask = watchInstallationFlags.String("dhcpNetmask", "", "The netmask for a DHCP request")
+	ptrDhcpRouter = watchInstallationFlags.String("dhcpRouter", "", "The router for a DHCP request")
+	ptrDhcpDnsServers = watchInstallationFlags.String("dhcpDnsServers",  "", "The DNS servers for a DHCP request")
 	ptrShouldDebug = watchInstallationFlags.String("shouldDebug", "false", "Should output debug output")
 
 	watchInstallationFlags.Parse(args)
@@ -122,6 +130,18 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	}
 	if ptrInstallerRsa == nil || *ptrInstallerRsa == "" {
 		return fmt.Errorf("Error: --bastionRsa not specified")
+	}
+	if ptrDhcpSubnet == nil || *ptrDhcpSubnet == "" {
+		return fmt.Errorf("Error: --dhcpSubnet not specified")
+	}
+	if ptrDhcpNetmask == nil || *ptrDhcpNetmask == "" {
+		return fmt.Errorf("Error: --dhcpNetmask not specified")
+	}
+	if ptrDhcpRouter == nil || *ptrDhcpRouter == "" {
+		return fmt.Errorf("Error: --dhcpRouter not specified")
+	}
+	if ptrDhcpDnsServers == nil || *ptrDhcpDnsServers == "" {
+		return fmt.Errorf("Error: --dhcpDnsServers not specified")
 	}
 
 	switch strings.ToLower(*ptrEnableDhcpd) {
@@ -218,7 +238,15 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 		if enableDhcpd != "" {
 			filename := "/tmp/dhcpd.conf"
-			err = dhcpdConf(ctx, filename, *ptrCloud, *ptrDomainName, enableDhcpd)
+			err = dhcpdConf(ctx,
+				filename,
+				*ptrCloud,
+				*ptrDomainName,
+				*ptrDhcpSubnet,
+				*ptrDhcpNetmask,
+				*ptrDhcpRouter,
+				*ptrDhcpDnsServers,
+			)
 			if err != nil {
 				return err
 			}
@@ -537,7 +565,7 @@ func findIpAddress(server servers.Server) (string, string, error) {
 	return "", "", nil
 }
 
-func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, location string) error {
+func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, dhcpSubnet string, dhcpNetmask string, dhcpRouter string, dhcpDnsServers string) error {
 	var (
 		connCompute *gophercloud.ServiceClient
 		allServers  []servers.Server
@@ -586,22 +614,11 @@ func dhcpdConf(ctx context.Context, filename string, cloud string, domainName st
 	fmt.Fprintf(file, "default-lease-time 2678400;\n")
 	fmt.Fprintf(file, "max-lease-time 2678400;\n")
 	fmt.Fprintf(file, "\n")
-	switch (location) {
-	case "HACK1":
-		fmt.Fprintf(file, "subnet 10.20.176.0 netmask 255.255.240.0 {\n")
-		fmt.Fprintf(file, "   interface env2;\n")
-		fmt.Fprintf(file, "   option routers 10.20.176.1;\n")
-		fmt.Fprintf(file, "   option subnet-mask 255.255.240.0;\n")
-		fmt.Fprintf(file, "   option domain-name-servers 10.0.10.4, 9.9.9.9;\n")
-	case "HACK2":
-		fmt.Fprintf(file, "subnet 10.130.32.0 netmask 255.255.240.0 {\n")
-		fmt.Fprintf(file, "   interface env2;\n")
-		fmt.Fprintf(file, "   option routers 10.130.32.1;\n")
-		fmt.Fprintf(file, "   option subnet-mask 255.255.240.0;\n")
-		fmt.Fprintf(file, "   option domain-name-servers 10.2.70.215, 10.11.5.160, 8.8.8.8;\n")
-	default:
-		return fmt.Errorf("Unknown location %s", location)
-	}
+	fmt.Fprintf(file, "subnet %s netmask %s {\n", dhcpSubnet, dhcpNetmask)
+	fmt.Fprintf(file, "   interface env2;\n")
+	fmt.Fprintf(file, "   option routers %s;\n", dhcpRouter)
+	fmt.Fprintf(file, "   option subnet-mask %s;\n", dhcpSubnet)
+	fmt.Fprintf(file, "   option domain-name-servers %s;\n", dhcpDnsServers)
 	fmt.Fprintf(file, "   option domain-name \"%s\";\n", domainName)
 	fmt.Fprintf(file, "   ignore unknown-clients;\n")
 	fmt.Fprintf(file, "#  update-static-leases true;\n")

@@ -88,7 +88,7 @@ func (oc *Oc) ClusterStatus() {
 			"oc --request-timeout=5s get machines.machine.openshift.io -n openshift-machine-api",
 			"oc --request-timeout=5s get machineset.machine.openshift.io -n openshift-machine-api",
 			"oc --request-timeout=5s logs -l k8s-app=controller -c machine-controller -n openshift-machine-api",
-			"oc --request-timeout=5s get co/cloud-controller-manager",
+			"oc --request-timeout=5s describe co/cloud-controller-manager",
 			"oc --request-timeout=5s describe cm/cloud-provider-config -n openshift-config",
 //			"oc --request-timeout=5s get pod -l k8s-app=cloud-manager-operator -n openshift-cloud-controller-manager-operator",
 			"oc --request-timeout=5s get pods -n openshift-cloud-controller-manager-operator",

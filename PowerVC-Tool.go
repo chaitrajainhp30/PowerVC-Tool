@@ -42,6 +42,7 @@ var (
 func printUsage(executableName string) {
 	fmt.Fprintf(os.Stderr, "Usage: %s [ "+
 		"create-bastion "+
+		"| create-rhcos "+
 		"| create-cluster "+
 		"| watch-installation "+
 		"| watch-create"+
