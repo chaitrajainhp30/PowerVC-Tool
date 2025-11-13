@@ -87,7 +87,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		ptrDhcpDnsServers   *string
 		ptrEnableDhcpd      *string
 		ptrShouldDebug      *string
-		enableDhcpd         = ""
+		enableDhcpd         = false
 		ctx                 context.Context
 		cancel              context.CancelFunc
 		connCompute         *gophercloud.ServiceClient
@@ -145,14 +145,12 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	}
 
 	switch strings.ToLower(*ptrEnableDhcpd) {
-	case "HACK1":
-		enableDhcpd = *ptrEnableDhcpd
-	case "HACK2":
-		enableDhcpd = *ptrEnableDhcpd
+	case "true":
+		enableDhcpd = true
 	case "false":
-		enableDhcpd = ""
+		enableDhcpd = false
 	default:
-		return fmt.Errorf("Error: enableDhcpd is not HACK[12]/false (%s)\n", *ptrShouldDebug)
+		return fmt.Errorf("Error: enableDhcpd is not true/false (%s)\n", *ptrShouldDebug)
 	}
 
 	switch strings.ToLower(*ptrShouldDebug) {
@@ -236,7 +234,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 		fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
 
-		if enableDhcpd != "" {
+		if enableDhcpd {
 			filename := "/tmp/dhcpd.conf"
 			err = dhcpdConf(ctx,
 				filename,
