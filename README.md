@@ -4,6 +4,7 @@ Useful tool to create and check OpenShift clusters on IBM Cloud PowerVC
 CLI opitons:
 - [create-bastion](https://github.com/hamzy/PowerVC-Tool#create-bastion)
 - [create-cluster](https://github.com/hamzy/PowerVC-Tool#create-cluster)
+- [create-rhcos](https://github.com/hamzy/PowerVC-Tool#create-rhcos)
 - [watch-create](https://github.com/hamzy/PowerVC-Tool#watch-create)
 - [watch-installation](https://github.com/hamzy/PowerVC-Tool#watch-installation)
 
@@ -16,7 +17,7 @@ The environment variable `IBMCLOUD_API_KEY` is optional.  If not set, make sure 
 
 Example usage:
 
-`$ PowerVC-Tool create-bastion --cloud ${cloud_name} --bastionName ${bastion_name} --flavorName ${flavor_name} --imageName ${image_name} --networkName ${network_name} --sshKeyName ${ssh_keyname} --shouldDebug true`
+`$ PowerVC-Tool create-bastion --cloud ${cloud_name} --bastionName ${bastion_name} --flavorName ${flavor_name} --imageName ${image_name} --networkName ${network_name} --sshKeyName ${ssh_keyname} --domainName ${domain_name} --shouldDebug true`
 
 args:
 - `cloud` the name of the cloud to use in the `~/.config/openstack/clouds.yaml` file.
@@ -31,6 +32,8 @@ args:
 
 - `sshKeyName` The OpenStack ssh keyname to create the VM with.
 
+- `domainName` The DNS domain name for the bastion. (optional)
+
 - `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
 
 ## create-cluster
@@ -43,6 +46,34 @@ Example usage:
 
 args:
 - `directory` location to use the IPI installer
+
+- `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
+
+## create-rhcos
+
+This will create a test RHCOS VM.  This VM will be managed by another instance of this program with the `watch-installation` parameter.
+
+NOTE:
+The environment variable `IBMCLOUD_API_KEY` is optional.  If not set, make sure DNS is supported via CoreOS DNS or another method.
+
+Example usage:
+
+`$ PowerVC-Tool create-rhcos --cloud ${cloud_name} --rhcosName ${rhcos_name} --flavorName ${flavor_name} --imageName ${image_name} --networkName ${network_name} --sshPublicKey $(cat ${HOME}/.ssh/id_installer_rsa.pub) --domainName ${domain_name} --shouldDebug true`
+
+args:
+- `cloud` the name of the cloud to use in the `~/.config/openstack/clouds.yaml` file.
+
+- `rhcosName` The name of the VM to use which should match the OpenShift cluster name.
+
+- `flavorName` The OpenStack flavor to create the VM with.
+
+- `imageName` The OpenStack image to create the VM with.
+
+- `networkName` The OpenStack network to create the VM with.
+
+- `sshPublicKey` The OpenStack ssh keyname to create the VM with.
+
+- `domainName` The DNS domain name for the bastion. (optional)
 
 - `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
 
@@ -81,7 +112,7 @@ The environment variable `IBMCLOUD_API_KEY` is optional.  If not set, make sure 
 
 Example usage:
 
-`$ PowerVC-Tool watch-installation --cloud ${cloud_name} --domainName ${domain_name} --bastionMetadata ${directory}/metadata.json --bastionUsername ${bastion_username} --bastionRsa ${HOME}/.ssh/id_installer_rsa --shouldDebug true`
+`$ PowerVC-Tool watch-installation --cloud ${cloud_name} --domainName ${domain_name} --bastionMetadata ${directory}/metadata.json --bastionUsername ${bastion_username} --bastionRsa ${HOME}/.ssh/id_installer_rsa --dhcpSubnet ${dhcp_subnet} --dhcpNetmask ${dhcp_netmask} --dhcpRouter ${dhcp_router} --dhcpDnsServers "${dhcp_servers}" --shouldDebug true`
 
 args:
 - `cloud` the name of the cloud to use in the `~/.config/openstack/clouds.yaml` file.
@@ -93,6 +124,14 @@ args:
 - `bastionUsername` the default username for the HAProxy VM.
 
 - `bastionRsa` the SSH private key file for the default username for the HAProxy VM.
+
+- `dhcpSubnet` The subnet to use for DHCPd requests.
+
+- `dhcpNetmask` The netmask to use for DHCPd requests.
+
+- `dhcpRouter` The router to use for DHCPd requests.
+
+- `dhcpDnsServers` The comma separated DNS servers to use for DHCPd requests.
 
 - `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
 
