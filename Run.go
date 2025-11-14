@@ -101,7 +101,7 @@ func runSplitCommand2(acmdline []string) (out []byte, err error) {
 	return
 }
 
-func runSplitCommandNoErr(acmdline []string) (out []byte, err error) {
+func runSplitCommandNoErr(acmdline []string, silent bool) (out []byte, err error) {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -122,8 +122,10 @@ func runSplitCommandNoErr(acmdline []string) (out []byte, err error) {
 	}
 	cmd.Stdout = &stdout // Capture stderr into a buffer
 
-	fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
-	fmt.Println(acmdline)
+	if !silent {
+		fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
+		fmt.Println(acmdline)
+	}
 	err = cmd.Run()
 	out = stdout.Bytes()
 	return

@@ -218,7 +218,7 @@ func setupRhcosServer(ctx context.Context, cloudName string, server servers.Serv
 		log.Debugf("setupRhcosServer: %v", exitError.ExitCode() == 1)
 		if exitError.ExitCode() == 1 {
 
-			outb, err = keyscanServer(ctx, ipAddress)
+			outb, err = keyscanServer(ctx, ipAddress, false)
 			if err != nil {
 				return err
 			}

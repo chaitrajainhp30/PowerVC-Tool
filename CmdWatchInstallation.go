@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 
@@ -203,6 +204,19 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 		allServers, err = getAllServers(ctx, connCompute)
 		if err != nil {
+			if strings.Contains(err.Error(), "The request you have made requires authentication") {
+				connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(*ptrCloud))
+				if err != nil {
+					return err
+				}
+				log.Debugf("Trying to get the servers again")
+
+				allServers, err = getAllServers(ctx, connCompute)
+				if err != nil {
+					return err
+				}
+			}
+
 			return err
 		}
 
@@ -433,7 +447,7 @@ func getAllServers(ctx context.Context, connCompute *gophercloud.ServiceClient) 
 
 	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(context.Context) (bool, error) {
 		var (
-			err2     error
+			err2 error
 		)
 
 		duration = leftInContext(ctx)
@@ -441,6 +455,11 @@ func getAllServers(ctx context.Context, connCompute *gophercloud.ServiceClient) 
 		pager, err2 = servers.List(connCompute, nil).AllPages(ctx)
 		if err2 != nil {
 			log.Debugf("getAllServers: servers.List returned error %v", err2)
+
+			if strings.Contains(err2.Error(), "The request you have made requires authentication") {
+				return true, err2
+			}
+
 			return false, nil
 		}
 //		log.Debugf("getAllServers: pager = %+v", pager)
@@ -559,6 +578,106 @@ func findIpAddress(server servers.Server) (string, string, error) {
 	}
 
 	return "", "", nil
+}
+
+func findHypervisor(ctx context.Context, cloudName string, name string) (foundHypervisor hypervisors.Hypervisor, err error) {
+	var (
+		pager          pagination.Page
+		allHypervisors []hypervisors.Hypervisor
+		hypervisor     hypervisors.Hypervisor
+	)
+
+	connServer, err := NewServiceClient(ctx, "compute", DefaultClientOpts(cloudName))
+	if err != nil {
+		err = fmt.Errorf("NewServiceClient returns %v", err)
+		return
+	}
+	log.Debugf("findHypervisor: connServer = %+v\n", connServer)
+
+	pager, err = hypervisors.List(connServer, nil).AllPages(ctx)
+	if err != nil {
+		return
+	}
+//	log.Debugf("findHypervisor: pager = %+v", pager)
+
+	allHypervisors, err = hypervisors.ExtractHypervisors(pager)
+	if err != nil {
+		return
+	}
+//	log.Debugf("findHypervisor: allHypervisors = %+v", allHypervisors)
+
+	for _, hypervisor = range allHypervisors {
+		log.Debugf("findHypervisor: hypervisor.HypervisorHostname = %s, hypervisor.ID = %s", hypervisor.HypervisorHostname, hypervisor.ID)
+
+		if hypervisor.HypervisorHostname == name {
+			foundHypervisor = hypervisor
+			return
+		}
+	}
+
+	err = fmt.Errorf("Could not find hypervisor named %s", name)
+	return
+}
+
+func getAllHypervisors(ctx context.Context, connCompute *gophercloud.ServiceClient) (allHypervisors []hypervisors.Hypervisor, err error) {
+	var (
+		duration time.Duration
+		pager    pagination.Page
+	)
+
+	backoff := wait.Backoff{
+		Duration: 1 * time.Minute,
+		Factor:   1.1,
+		Cap:      leftInContext(ctx),
+		Steps:    math.MaxInt32,
+	}
+
+	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(context.Context) (bool, error) {
+		var (
+			err2 error
+		)
+
+		duration = leftInContext(ctx)
+		log.Debugf("getAllHypervisors: duration = %v, calling hypervisors.List", duration)
+		pager, err2 = hypervisors.List(connCompute, nil).AllPages(ctx)
+		if err2 != nil {
+			log.Debugf("getAllHypervisors: hypervisors.List returned error %v", err2)
+
+			if strings.Contains(err2.Error(), "The request you have made requires authentication") {
+				return true, err2
+			}
+
+			return false, nil
+		}
+//		log.Debugf("getAllHypervisors: pager = %+v", pager)
+
+		allHypervisors, err2 = hypervisors.ExtractHypervisors(pager)
+		if err2 != nil {
+			log.Debugf("getAllHypervisors: hypervisors.ExtractHypervisors returned error %v", err2)
+			return false, nil
+		}
+//		log.Debugf("getAllHypervisors: allHypervisors = %+v", allHypervisors)
+
+		return true, nil
+	})
+
+	return
+}
+
+func findHypervisorverInList(allHypervisors []hypervisors.Hypervisor, name string) (foundHypervisor hypervisors.Hypervisor, err error) {
+	var (
+		hypervisor hypervisors.Hypervisor
+	)
+
+	for _, hypervisor = range allHypervisors {
+		if hypervisor.HypervisorHostname == name {
+			foundHypervisor = hypervisor
+			return
+		}
+	}
+
+	err = fmt.Errorf("Could not find hypervisor named %s", name)
+	return
 }
 
 func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, dhcpSubnet string, dhcpNetmask string, dhcpRouter string, dhcpDnsServers string) error {

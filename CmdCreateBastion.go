@@ -344,7 +344,7 @@ func setupBastionServer(ctx context.Context, cloudName string, server servers.Se
 		log.Debugf("setupBastionServer: %v", exitError.ExitCode() == 1)
 		if exitError.ExitCode() == 1 {
 
-			outb, err = keyscanServer(ctx, ipAddress)
+			outb, err = keyscanServer(ctx, ipAddress, false)
 			if err != nil {
 				return err
 			}
@@ -537,7 +537,7 @@ func removeCommentLines(input string) string {
 	return strings.Join(resultLines, "\n")
 }
 
-func keyscanServer(ctx context.Context, ipAddress string) ([]byte, error) {
+func keyscanServer(ctx context.Context, ipAddress string, silent bool) ([]byte, error) {
 	var (
 		outb []byte
 		outs string
@@ -559,7 +559,8 @@ func keyscanServer(ctx context.Context, ipAddress string) ([]byte, error) {
 		outb, err2 = runSplitCommandNoErr([]string{
 			"ssh-keyscan",
 			ipAddress,
-		})
+		},
+			silent)
 		outs = strings.TrimSpace(string(outb))
 		log.Debugf("keyscanServer: outs = %s", outs)
 		if err2 != nil {

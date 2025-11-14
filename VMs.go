@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 )
 
@@ -85,13 +86,14 @@ func (vms *VMs) Run() error {
 
 func (vms *VMs) ClusterStatus() {
 	var (
-		ctx         context.Context
-		cancel      context.CancelFunc
-		connCompute *gophercloud.ServiceClient
-		infraID     string
-		allServers  []servers.Server
-		server      servers.Server
-		err         error
+		ctx            context.Context
+		cancel         context.CancelFunc
+		connCompute    *gophercloud.ServiceClient
+		infraID        string
+		allServers     []servers.Server
+		server         servers.Server
+		allHypervisors []hypervisors.Hypervisor
+		err            error
 	)
 
 	ctx, cancel = vms.services.GetContextWithTimeout()
@@ -112,12 +114,20 @@ func (vms *VMs) ClusterStatus() {
 		return
 	}
 
+	allHypervisors, err = getAllHypervisors(ctx, connCompute)
+	if err != nil {
+		fmt.Printf("%s: Error: getAllHypervisors returns error %v\n", VMsName, err)
+		return
+	}
+
 	fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
 
 	for _, server = range allServers {
 		var (
-			macAddress string
-			ipAddress  string
+			macAddress         string
+			ipAddress          string
+			sshAlive           = "NO"
+			hypervisor         hypervisors.Hypervisor
 		)
 
 		if !strings.HasPrefix(strings.ToLower(server.Name), infraID) {
@@ -132,14 +142,39 @@ func (vms *VMs) ClusterStatus() {
 			continue
 		}
 
-		fmt.Printf("%s: %s has status (%s), power state (%s), MAC address (%s), and IP address (%s)\n",
+		outb, err := keyscanServer(ctx, ipAddress, true)
+		if err == nil && len(outb) != 0 {
+			sshAlive = "YES"
+		}
+
+		fmt.Printf("%s: %s has status (%s), power state (%s), MAC address (%s), IP address (%s), and (%s) ssh status\n",
 			VMsName,
 			server.Name,
 			server.Status,
 			server.PowerState.String(),
 			macAddress,
 			ipAddress,
+			sshAlive,
 		)
+		fmt.Println()
+
+		log.Debugf("ClusterStatus: server.HypervisorHostname = %s", server.HypervisorHostname)
+		hypervisor, err = findHypervisorverInList(allHypervisors, server.HypervisorHostname)
+		log.Debugf("ClusterStatus: hypervisor = %+v\n", hypervisor)
+		if err != nil {
+			log.Debugf("ClusterStatus: findHypervisorverInList received error %v\n", err)
+			continue
+		}
+
+		if false {
+			fmt.Printf("%s: Console reached via: sshpass -p ${SSH_PASSWORD} ssh -t hscroot@%s mkvterm -m %s -p %s\n",
+				VMsName,
+				hypervisor.HostIP,
+				hypervisor.HypervisorHostname,
+				server.InstanceName,
+			)
+			fmt.Println()
+		}
 	}
 }
 
