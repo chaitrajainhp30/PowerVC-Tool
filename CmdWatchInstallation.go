@@ -21,16 +21,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/v2/pagination"
 
 	"github.com/IBM/go-sdk-core/v5/core"
 
@@ -43,7 +39,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // stringArray is a custom type to hold an array of strings.
@@ -91,7 +86,6 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		enableDhcpd         = false
 		ctx                 context.Context
 		cancel              context.CancelFunc
-		connCompute         *gophercloud.ServiceClient
 		knownServers        = sets.Set[string]{}
 		newServerSet        sets.Set[string]
 		addedServersSet     sets.Set[string]
@@ -179,12 +173,6 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	ctx, cancel = context.WithTimeout(context.TODO(), 5*time.Minute)
 	defer cancel()
 
-	connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(*ptrCloud))
-	if err != nil {
-		return err
-	}
-//	log.Debugf("connCompute = %+v", connCompute)
-
 	bastionInformations = make([]bastionInformation, 0)
 	for _, bastionMetadata := range bastionMetadatas {
 		bastionInformations = append(bastionInformations, bastionInformation{
@@ -199,24 +187,11 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	for true {
 		log.Debugf("Waking up")
 
-		ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Hour)
+		ctx, cancel = context.WithTimeout(context.TODO(), 24*time.Hour)
 		defer cancel()
 
-		allServers, err = getAllServers(ctx, connCompute)
+		allServers, err = getAllServers(ctx, *ptrCloud)
 		if err != nil {
-			if strings.Contains(err.Error(), "The request you have made requires authentication") {
-				connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(*ptrCloud))
-				if err != nil {
-					return err
-				}
-				log.Debugf("Trying to get the servers again")
-
-				allServers, err = getAllServers(ctx, connCompute)
-				if err != nil {
-					return err
-				}
-			}
-
 			return err
 		}
 
@@ -348,17 +323,10 @@ func getMetadataClusterName(filename string) (clusterName string, infraID string
 
 func updateBastionInformations(ctx context.Context, cloud string, bastionInformations []bastionInformation) (err error) {
 	var (
-		connCompute *gophercloud.ServiceClient
-		allServers  []servers.Server
+		allServers []servers.Server
 	)
 
-	connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(cloud))
-	if err != nil {
-		return
-	}
-//	log.Debugf("updateBastionInformations: connCompute = %+v", connCompute)
-
-	allServers, err = getAllServers(ctx, connCompute)
+	allServers, err = getAllServers(ctx, cloud)
 	if err != nil {
 		return
 	}
@@ -429,67 +397,6 @@ func updateBastionInformations(ctx context.Context, cloud string, bastionInforma
 		}
 	}
 
-	return
-}
-
-func getAllServers(ctx context.Context, connCompute *gophercloud.ServiceClient) (allServers []servers.Server, err error) {
-	var (
-		duration time.Duration
-		pager    pagination.Page
-	)
-
-	backoff := wait.Backoff{
-		Duration: 1 * time.Minute,
-		Factor:   1.1,
-		Cap:      leftInContext(ctx),
-		Steps:    math.MaxInt32,
-	}
-
-	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(context.Context) (bool, error) {
-		var (
-			err2 error
-		)
-
-		duration = leftInContext(ctx)
-		log.Debugf("getAllServers: duration = %v, calling servers.List", duration)
-		pager, err2 = servers.List(connCompute, nil).AllPages(ctx)
-		if err2 != nil {
-			log.Debugf("getAllServers: servers.List returned error %v", err2)
-
-			if strings.Contains(err2.Error(), "The request you have made requires authentication") {
-				return true, err2
-			}
-
-			return false, nil
-		}
-//		log.Debugf("getAllServers: pager = %+v", pager)
-
-		allServers, err2 = servers.ExtractServers(pager)
-		if err2 != nil {
-			log.Debugf("getAllServers: servers.ExtractServers returned error %v", err2)
-			return false, nil
-		}
-//		log.Debugf("getAllServers: allServers = %+v", allServers)
-
-		return true, nil
-	})
-
-	return
-}
-
-func findServerInList(allServers []servers.Server, name string) (foundServer servers.Server, err error) {
-	var (
-		server servers.Server
-	)
-
-	for _, server = range allServers {
-		if server.Name == name {
-			foundServer = server
-			return
-		}
-	}
-
-	err = fmt.Errorf("Could not find server named %s", name)
 	return
 }
 
@@ -580,122 +487,15 @@ func findIpAddress(server servers.Server) (string, string, error) {
 	return "", "", nil
 }
 
-func findHypervisor(ctx context.Context, cloudName string, name string) (foundHypervisor hypervisors.Hypervisor, err error) {
-	var (
-		pager          pagination.Page
-		allHypervisors []hypervisors.Hypervisor
-		hypervisor     hypervisors.Hypervisor
-	)
-
-	connServer, err := NewServiceClient(ctx, "compute", DefaultClientOpts(cloudName))
-	if err != nil {
-		err = fmt.Errorf("NewServiceClient returns %v", err)
-		return
-	}
-	log.Debugf("findHypervisor: connServer = %+v\n", connServer)
-
-	pager, err = hypervisors.List(connServer, nil).AllPages(ctx)
-	if err != nil {
-		return
-	}
-//	log.Debugf("findHypervisor: pager = %+v", pager)
-
-	allHypervisors, err = hypervisors.ExtractHypervisors(pager)
-	if err != nil {
-		return
-	}
-//	log.Debugf("findHypervisor: allHypervisors = %+v", allHypervisors)
-
-	for _, hypervisor = range allHypervisors {
-		log.Debugf("findHypervisor: hypervisor.HypervisorHostname = %s, hypervisor.ID = %s", hypervisor.HypervisorHostname, hypervisor.ID)
-
-		if hypervisor.HypervisorHostname == name {
-			foundHypervisor = hypervisor
-			return
-		}
-	}
-
-	err = fmt.Errorf("Could not find hypervisor named %s", name)
-	return
-}
-
-func getAllHypervisors(ctx context.Context, connCompute *gophercloud.ServiceClient) (allHypervisors []hypervisors.Hypervisor, err error) {
-	var (
-		duration time.Duration
-		pager    pagination.Page
-	)
-
-	backoff := wait.Backoff{
-		Duration: 1 * time.Minute,
-		Factor:   1.1,
-		Cap:      leftInContext(ctx),
-		Steps:    math.MaxInt32,
-	}
-
-	err = wait.ExponentialBackoffWithContext(ctx, backoff, func(context.Context) (bool, error) {
-		var (
-			err2 error
-		)
-
-		duration = leftInContext(ctx)
-		log.Debugf("getAllHypervisors: duration = %v, calling hypervisors.List", duration)
-		pager, err2 = hypervisors.List(connCompute, nil).AllPages(ctx)
-		if err2 != nil {
-			log.Debugf("getAllHypervisors: hypervisors.List returned error %v", err2)
-
-			if strings.Contains(err2.Error(), "The request you have made requires authentication") {
-				return true, err2
-			}
-
-			return false, nil
-		}
-//		log.Debugf("getAllHypervisors: pager = %+v", pager)
-
-		allHypervisors, err2 = hypervisors.ExtractHypervisors(pager)
-		if err2 != nil {
-			log.Debugf("getAllHypervisors: hypervisors.ExtractHypervisors returned error %v", err2)
-			return false, nil
-		}
-//		log.Debugf("getAllHypervisors: allHypervisors = %+v", allHypervisors)
-
-		return true, nil
-	})
-
-	return
-}
-
-func findHypervisorverInList(allHypervisors []hypervisors.Hypervisor, name string) (foundHypervisor hypervisors.Hypervisor, err error) {
-	var (
-		hypervisor hypervisors.Hypervisor
-	)
-
-	for _, hypervisor = range allHypervisors {
-		if hypervisor.HypervisorHostname == name {
-			foundHypervisor = hypervisor
-			return
-		}
-	}
-
-	err = fmt.Errorf("Could not find hypervisor named %s", name)
-	return
-}
-
 func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, dhcpSubnet string, dhcpNetmask string, dhcpRouter string, dhcpDnsServers string) error {
 	var (
-		connCompute *gophercloud.ServiceClient
-		allServers  []servers.Server
-		server      servers.Server
-		file        *os.File
-		err         error
+		allServers []servers.Server
+		server     servers.Server
+		file       *os.File
+		err        error
 	)
 
-	connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(cloud))
-	if err != nil {
-		return err
-	}
-//	log.Debugf("dhcpdConf: connCompute = %+v", connCompute)
-
-	allServers, err = getAllServers(ctx, connCompute)
+	allServers, err = getAllServers(ctx, cloud)
 	if err != nil {
 		return err
 	}
@@ -761,19 +561,12 @@ func dhcpdConf(ctx context.Context, filename string, cloud string, domainName st
 
 func haproxyCfg(ctx context.Context, cloud string, bastionInformations []bastionInformation) error {
 	var (
-		connCompute *gophercloud.ServiceClient
-		allServers  []servers.Server
+		allServers []servers.Server
 		server      servers.Server
 		err         error
 	)
 
-	connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(cloud))
-	if err != nil {
-		return err
-	}
-//	log.Debugf("haproxyCfg: connCompute = %+v", connCompute)
-
-	allServers, err = getAllServers(ctx, connCompute)
+	allServers, err = getAllServers(ctx, cloud)
 	if err != nil {
 		return err
 	}
@@ -975,15 +768,14 @@ var (
 
 func dnsRecords(ctx context.Context, cloud string, apiKey string, domainName string, bastionInformations []bastionInformation, knownServers sets.Set[string], addedServerSet sets.Set[string], deletedServerSet sets.Set[string]) error {
 	var (
-		dnsService    *dnsrecordsv1.DnsRecordsV1
-		cisServiceID  string
-		crnstr        string
-		zoneID        string
-		connCompute   *gophercloud.ServiceClient
-		allServers    []servers.Server
-		server        servers.Server
-		clusterName   string
-		err           error
+		dnsService   *dnsrecordsv1.DnsRecordsV1
+		cisServiceID string
+		crnstr       string
+		zoneID       string
+		allServers   []servers.Server
+		server       servers.Server
+		clusterName  string
+		err          error
 	)
 
 	if apiKey == "" {
@@ -1011,13 +803,7 @@ func dnsRecords(ctx context.Context, cloud string, apiKey string, domainName str
 	}
 	log.Debugf("dnsRecords: dnsService = %+v", dnsService)
 
-	connCompute, err = NewServiceClient(ctx, "compute", DefaultClientOpts(cloud))
-	if err != nil {
-		return err
-	}
-//	log.Debugf("dnsRecords: connCompute = %+v", connCompute)
-
-	allServers, err = getAllServers(ctx, connCompute)
+	allServers, err = getAllServers(ctx, cloud)
 	if err != nil {
 		return err
 	}

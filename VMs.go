@@ -108,7 +108,7 @@ func (vms *VMs) ClusterStatus() {
 	infraID = vms.services.GetMetadata().GetInfraID()
 	log.Debugf("ClusterStatus: infraID = %s", infraID)
 
-	allServers, err = getAllServers(ctx, connCompute)
+	allServers, err = getAllServers(ctx, vms.services.GetCloud())
 	if err != nil {
 		fmt.Printf("%s: Error: getAllServers returns error %v\n", VMsName, err)
 		return
