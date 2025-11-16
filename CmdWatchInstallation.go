@@ -541,7 +541,7 @@ func dhcpdConf(ctx context.Context, filename string, cloud string, domainName st
 	fmt.Fprintf(file, "   option subnet-mask %s;\n", dhcpSubnet)
 	fmt.Fprintf(file, "   option domain-name-servers %s;\n", dhcpDnsServers)
 	fmt.Fprintf(file, "   option domain-name \"%s\";\n", domainName)
-	fmt.Fprintf(file, "   option dhcp-server-identifier \"%s\";\n", dhcpServerId)
+	fmt.Fprintf(file, "   option dhcp-server-identifier %s;\n", dhcpServerId)
 	fmt.Fprintf(file, "   ignore unknown-clients;\n")
 	fmt.Fprintf(file, "#  update-static-leases true;\n")
 	fmt.Fprintf(file, "}\n")
