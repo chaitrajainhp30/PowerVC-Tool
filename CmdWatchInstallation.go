@@ -81,6 +81,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		ptrDhcpNetmask      *string
 		ptrDhcpRouter       *string
 		ptrDhcpDnsServers   *string
+		ptrDhcpServerId     *string
 		ptrEnableDhcpd      *string
 		ptrShouldDebug      *string
 		enableDhcpd         = false
@@ -107,6 +108,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	ptrDhcpNetmask = watchInstallationFlags.String("dhcpNetmask", "", "The netmask for a DHCP request")
 	ptrDhcpRouter = watchInstallationFlags.String("dhcpRouter", "", "The router for a DHCP request")
 	ptrDhcpDnsServers = watchInstallationFlags.String("dhcpDnsServers",  "", "The DNS servers for a DHCP request")
+	ptrDhcpServerId = watchInstallationFlags.String("dhcpServerId",  "", "The DNS server identifier for a DHCP request")
 	ptrShouldDebug = watchInstallationFlags.String("shouldDebug", "false", "Should output debug output")
 
 	watchInstallationFlags.Parse(args)
@@ -137,6 +139,9 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	}
 	if ptrDhcpDnsServers == nil || *ptrDhcpDnsServers == "" {
 		return fmt.Errorf("Error: --dhcpDnsServers not specified")
+	}
+	if ptrDhcpServerId == nil || *ptrDhcpServerId == "" {
+		return fmt.Errorf("Error: --dhcpServerId not specified")
 	}
 
 	switch strings.ToLower(*ptrEnableDhcpd) {
@@ -233,6 +238,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 				*ptrDhcpNetmask,
 				*ptrDhcpRouter,
 				*ptrDhcpDnsServers,
+				*ptrDhcpServerId,
 			)
 			if err != nil {
 				return err
@@ -487,7 +493,7 @@ func findIpAddress(server servers.Server) (string, string, error) {
 	return "", "", nil
 }
 
-func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, dhcpSubnet string, dhcpNetmask string, dhcpRouter string, dhcpDnsServers string) error {
+func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, dhcpSubnet string, dhcpNetmask string, dhcpRouter string, dhcpDnsServers string, dhcpServerId string) error {
 	var (
 		allServers []servers.Server
 		server     servers.Server
@@ -535,6 +541,7 @@ func dhcpdConf(ctx context.Context, filename string, cloud string, domainName st
 	fmt.Fprintf(file, "   option subnet-mask %s;\n", dhcpSubnet)
 	fmt.Fprintf(file, "   option domain-name-servers %s;\n", dhcpDnsServers)
 	fmt.Fprintf(file, "   option domain-name \"%s\";\n", domainName)
+	fmt.Fprintf(file, "   option dhcp-server-identifier \"%s\";\n", dhcpServerId)
 	fmt.Fprintf(file, "   ignore unknown-clients;\n")
 	fmt.Fprintf(file, "#  update-static-leases true;\n")
 	fmt.Fprintf(file, "}\n")
