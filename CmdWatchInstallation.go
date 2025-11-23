@@ -77,6 +77,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		bastionMetadatas    stringArray
 		ptrBastionUsername  *string
 		ptrInstallerRsa     *string
+		ptrDhcpInterface    *string
 		ptrDhcpSubnet       *string
 		ptrDhcpNetmask      *string
 		ptrDhcpRouter       *string
@@ -103,6 +104,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	watchInstallationFlags.Var(&bastionMetadatas, "bastionMetadata", "A list of bastion names (can be specified multiple times)")
 	ptrBastionUsername = watchInstallationFlags.String("bastionUsername", "", "The username of the bastion VM to use")
 	ptrInstallerRsa = watchInstallationFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
+	ptrDhcpInterface = watchInstallationFlags.String("dhcpInterface", "false", "The interface name for the dhcpd server")
 	ptrEnableDhcpd = watchInstallationFlags.String("enableDhcpd", "false", "Should enable the dhcpd server")
 	ptrDhcpSubnet = watchInstallationFlags.String("dhcpSubnet", "", "The subnet for a DHCP request")
 	ptrDhcpNetmask = watchInstallationFlags.String("dhcpNetmask", "", "The netmask for a DHCP request")
@@ -127,6 +129,9 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	}
 	if ptrInstallerRsa == nil || *ptrInstallerRsa == "" {
 		return fmt.Errorf("Error: --bastionRsa not specified")
+	}
+	if ptrDhcpInterface == nil || *ptrDhcpInterface == "" {
+		return fmt.Errorf("Error: --dhcpInterface not specified")
 	}
 	if ptrDhcpSubnet == nil || *ptrDhcpSubnet == "" {
 		return fmt.Errorf("Error: --dhcpSubnet not specified")
@@ -228,12 +233,14 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 		fmt.Println("8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------")
 
+		log.Debugf("enableDhcpd = %v", enableDhcpd)
 		if enableDhcpd {
 			filename := "/tmp/dhcpd.conf"
 			err = dhcpdConf(ctx,
 				filename,
 				*ptrCloud,
 				*ptrDomainName,
+				*ptrDhcpInterface,
 				*ptrDhcpSubnet,
 				*ptrDhcpNetmask,
 				*ptrDhcpRouter,
@@ -493,7 +500,7 @@ func findIpAddress(server servers.Server) (string, string, error) {
 	return "", "", nil
 }
 
-func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, dhcpSubnet string, dhcpNetmask string, dhcpRouter string, dhcpDnsServers string, dhcpServerId string) error {
+func dhcpdConf(ctx context.Context, filename string, cloud string, domainName string, dhcpInterface string, dhcpSubnet string, dhcpNetmask string, dhcpRouter string, dhcpDnsServers string, dhcpServerId string) error {
 	var (
 		allServers []servers.Server
 		server     servers.Server
@@ -536,7 +543,7 @@ func dhcpdConf(ctx context.Context, filename string, cloud string, domainName st
 	fmt.Fprintf(file, "max-lease-time 2678400;\n")
 	fmt.Fprintf(file, "\n")
 	fmt.Fprintf(file, "subnet %s netmask %s {\n", dhcpSubnet, dhcpNetmask)
-	fmt.Fprintf(file, "   interface env2;\n")
+	fmt.Fprintf(file, "   interface %s;\n", dhcpInterface)
 	fmt.Fprintf(file, "   option routers %s;\n", dhcpRouter)
 	fmt.Fprintf(file, "   option subnet-mask %s;\n", dhcpSubnet)
 	fmt.Fprintf(file, "   option domain-name-servers %s;\n", dhcpDnsServers)
