@@ -91,6 +91,7 @@ PowerVC-Tool \
 	--networkName "${NETWORK_NAME}" \
 	--sshKeyName "${SSHKEY_NAME}" \
 	--domainName "${BASEDOMAIN}" \
+	--enableHAProxy true \
 	--shouldDebug true
 RC=$?
 
