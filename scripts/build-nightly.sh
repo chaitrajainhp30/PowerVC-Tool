@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+USE_PATCH=false
+
 declare -a ENV_VARS
 ENV_VARS=( )
 
@@ -135,13 +137,18 @@ git fetch origin
 
 git checkout ${COMMIT}
 
-echo "8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------"
-echo "Patching"
+if ${USE_PATCH}
+then
 
-patch -p1 < /home/OpenShift/PowerVC/0001-PowerVC-Add-new-platform-for-PowerVC-2025-11-14.patch
-patch -p1 < /home/OpenShift/PowerVC/0002-PowerVC-Do-not-use-Security-Groups-2025-11-14.patch
-patch -p1 < /home/OpenShift/PowerVC/0003-PowerVC-Does-not-support-OpenStack-Load-Balancers-2025-11-14.patch
-patch -p1 < /home/OpenShift/PowerVC/0004-PowerVC-Allow-bootstrap-ignition-upload-to-Swift-2025-11-14.patch
+	echo "8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------"
+	echo "Patching"
+
+	patch -p1 < /home/OpenShift/PowerVC/0001-PowerVC-Add-new-platform-for-PowerVC-2025-11-18.patch
+	patch -p1 < /home/OpenShift/PowerVC/0002-PowerVC-Do-not-use-Security-Groups-2025-11-18.patch
+	patch -p1 < /home/OpenShift/PowerVC/0003-PowerVC-Does-not-support-OpenStack-Load-Balancers-2025-11-18.patch
+	patch -p1 < /home/OpenShift/PowerVC/0004-PowerVC-Allow-bootstrap-ignition-upload-to-Swift-2025-11-18.patch
+
+fi
 
 echo "8<--------8<--------8<--------8<--------8<--------8<--------8<--------8<--------"
 echo "Building"
