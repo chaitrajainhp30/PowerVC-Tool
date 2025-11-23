@@ -47,6 +47,10 @@ const (
 	bastionIpFilename = "/tmp/bastionIp"
 )
 
+var (
+	enableHAProxy  = true
+)
+
 func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error {
 	var (
 		out            io.Writer
@@ -58,6 +62,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		ptrNetworkName *string
 		ptrSshKeyName  *string
 		ptrDomainName  *string
+		ptrEnableHAP   *string
 		ptrShouldDebug *string
 		ctx            context.Context
 		cancel         context.CancelFunc
@@ -76,6 +81,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 	ptrSshKeyName = createBastionFlags.String("sshKeyName", "", "The name of the ssh keypair to use")
 	// NOTE: This is optional
 	ptrDomainName = createBastionFlags.String("domainName", "", "The DNS domain to use")
+	ptrEnableHAP = createBastionFlags.String("enableHAProxy", "false", "Should install and enable HA Proxy demon")
 	ptrShouldDebug = createBastionFlags.String("shouldDebug", "false", "Should output debug output")
 
 	createBastionFlags.Parse(args)
@@ -97,6 +103,15 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 	}
 	if ptrSshKeyName == nil || *ptrSshKeyName == "" {
 		return fmt.Errorf("Error: --sshKeyName not specified")
+	}
+
+	switch strings.ToLower(*ptrEnableHAP) {
+	case "true":
+		enableHAProxy = true
+	case "false":
+		enableHAProxy = false
+	default:
+		return fmt.Errorf("Error: enableHAProxy is not true/false (%s)\n", *ptrEnableHAP)
 	}
 
 	switch strings.ToLower(*ptrShouldDebug) {
@@ -364,67 +379,51 @@ func setupBastionServer(ctx context.Context, cloudName string, server servers.Se
 
 	fmt.Printf("Setting up server %s...\n", server.Name)
 
-	outb, err = runSplitCommand2([]string{
-		"ssh",
-		"-i",
-		installerRsa,
-		fmt.Sprintf("cloud-user@%s", ipAddress),
-		"rpm",
-		"-q",
-		"haproxy",
-	})
-	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupBastionServer: outs = \"%s\"", outs)
-	if errors.As(err, &exitError) {
-		log.Debugf("setupBastionServer: exitError.ExitCode() = %+v\n", exitError.ExitCode())
+	if enableHAProxy {
+		outb, err = runSplitCommand2([]string{
+			"ssh",
+			"-i",
+			installerRsa,
+			fmt.Sprintf("cloud-user@%s", ipAddress),
+			"rpm",
+			"-q",
+			"haproxy",
+		})
+		outs = strings.TrimSpace(string(outb))
+		log.Debugf("setupBastionServer: outs = \"%s\"", outs)
+		if errors.As(err, &exitError) {
+			log.Debugf("setupBastionServer: exitError.ExitCode() = %+v\n", exitError.ExitCode())
 
-		if exitError.ExitCode() == 1 && outs == "package haproxy is not installed" {
-			outb, err = runSplitCommand2([]string{
-				"ssh",
-				"-i",
-				installerRsa,
-				fmt.Sprintf("cloud-user@%s", ipAddress),
-				"sudo",
-				"dnf",
-				"install",
-				"-y",
-				"haproxy",
-			})
-			outs = strings.TrimSpace(string(outb))
-			log.Debugf("setupBastionServer: outs = %s", outs)
+			if exitError.ExitCode() == 1 && outs == "package haproxy is not installed" {
+				outb, err = runSplitCommand2([]string{
+					"ssh",
+					"-i",
+					installerRsa,
+					fmt.Sprintf("cloud-user@%s", ipAddress),
+					"sudo",
+					"dnf",
+					"install",
+					"-y",
+					"haproxy",
+				})
+				outs = strings.TrimSpace(string(outb))
+				log.Debugf("setupBastionServer: outs = %s", outs)
+				log.Debugf("setupBastionServer: err = %+v", err)
+			}
+		} else if err != nil {
 			log.Debugf("setupBastionServer: err = %+v", err)
+			return err
 		}
-	} else if err != nil {
-		log.Debugf("setupBastionServer: err = %+v", err)
-		return err
-	}
 
-	outb, err = runSplitCommand2([]string{
-		"ssh",
-		"-i",
-		installerRsa,
-		fmt.Sprintf("cloud-user@%s", ipAddress),
-		"sudo",
-		"stat",
-		"-c",
-		"%a",
-		"/etc/haproxy/haproxy.cfg",
-	})
-	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
-	if err != nil {
-		log.Debugf("setupBastionServer: err = %+v", err)
-		return err
-	}
-	if outs != "646" {
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",
 			installerRsa,
 			fmt.Sprintf("cloud-user@%s", ipAddress),
 			"sudo",
-			"chmod",
-			"646",
+			"stat",
+			"-c",
+			"%a",
 			"/etc/haproxy/haproxy.cfg",
 		})
 		outs = strings.TrimSpace(string(outb))
@@ -433,33 +432,85 @@ func setupBastionServer(ctx context.Context, cloudName string, server servers.Se
 			log.Debugf("setupBastionServer: err = %+v", err)
 			return err
 		}
-	}
+		if outs != "646" {
+			outb, err = runSplitCommand2([]string{
+				"ssh",
+				"-i",
+				installerRsa,
+				fmt.Sprintf("cloud-user@%s", ipAddress),
+				"sudo",
+				"chmod",
+				"646",
+				"/etc/haproxy/haproxy.cfg",
+			})
+			outs = strings.TrimSpace(string(outb))
+			log.Debugf("setupBastionServer: outb = \"%s\"", outs)
+			if err != nil {
+				log.Debugf("setupBastionServer: err = %+v", err)
+				return err
+			}
+		}
 
-	outb, err = runSplitCommand2([]string{
-		"ssh",
-		"-i",
-		installerRsa,
-		fmt.Sprintf("cloud-user@%s", ipAddress),
-		"sudo",
-		"getsebool",
-		"haproxy_connect_any",
-	})
-	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
-	if err != nil {
-		log.Debugf("setupBastionServer: err = %+v", err)
-		return err
-	}
-	if outs != "haproxy_connect_any --> on" {
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",
 			installerRsa,
 			fmt.Sprintf("cloud-user@%s", ipAddress),
 			"sudo",
-			"setsebool",
-			"-P",
-			"haproxy_connect_any=1",
+			"getsebool",
+			"haproxy_connect_any",
+		})
+		outs = strings.TrimSpace(string(outb))
+		log.Debugf("setupBastionServer: outb = \"%s\"", outs)
+		if err != nil {
+			log.Debugf("setupBastionServer: err = %+v", err)
+			return err
+		}
+		if outs != "haproxy_connect_any --> on" {
+			outb, err = runSplitCommand2([]string{
+				"ssh",
+				"-i",
+				installerRsa,
+				fmt.Sprintf("cloud-user@%s", ipAddress),
+				"sudo",
+				"setsebool",
+				"-P",
+				"haproxy_connect_any=1",
+			})
+			outs = strings.TrimSpace(string(outb))
+			log.Debugf("setupBastionServer: outb = \"%s\"", outs)
+			if err != nil {
+				log.Debugf("setupBastionServer: err = %+v", err)
+				return err
+			}
+		}
+
+		outb, err = runSplitCommand2([]string{
+			"ssh",
+			"-i",
+			installerRsa,
+			fmt.Sprintf("cloud-user@%s", ipAddress),
+			"sudo",
+			"systemctl",
+			"enable",
+			"haproxy.service",
+		})
+		outs = strings.TrimSpace(string(outb))
+		log.Debugf("setupBastionServer: outb = \"%s\"", outs)
+		if err != nil {
+			log.Debugf("setupBastionServer: err = %+v", err)
+			return err
+		}
+
+		outb, err = runSplitCommand2([]string{
+			"ssh",
+			"-i",
+			installerRsa,
+			fmt.Sprintf("cloud-user@%s", ipAddress),
+			"sudo",
+			"systemctl",
+			"start",
+			"haproxy.service",
 		})
 		outs = strings.TrimSpace(string(outb))
 		log.Debugf("setupBastionServer: outb = \"%s\"", outs)
@@ -477,40 +528,6 @@ func setupBastionServer(ctx context.Context, cloudName string, server servers.Se
 	fileBastionIp.Write([]byte(ipAddress))
 
 	defer fileBastionIp.Close()
-
-	outb, err = runSplitCommand2([]string{
-		"ssh",
-		"-i",
-		installerRsa,
-		fmt.Sprintf("cloud-user@%s", ipAddress),
-		"sudo",
-		"systemctl",
-		"enable",
-		"haproxy.service",
-	})
-	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
-	if err != nil {
-		log.Debugf("setupBastionServer: err = %+v", err)
-		return err
-	}
-
-	outb, err = runSplitCommand2([]string{
-		"ssh",
-		"-i",
-		installerRsa,
-		fmt.Sprintf("cloud-user@%s", ipAddress),
-		"sudo",
-		"systemctl",
-		"start",
-		"haproxy.service",
-	})
-	outs = strings.TrimSpace(string(outb))
-	log.Debugf("setupBastionServer: outb = \"%s\"", outs)
-	if err != nil {
-		log.Debugf("setupBastionServer: err = %+v", err)
-		return err
-	}
 
 	return err
 }
