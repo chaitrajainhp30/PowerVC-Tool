@@ -118,16 +118,25 @@ fi
 
 for (( TRIES=0; TRIES<=60; TRIES++ ))
 do
-	if getent ahostsv4 api.${CLUSTER_NAME}.${BASEDOMAIN} > /dev/null 2>&1
+	set +e
+	IP=$(getent ahostsv4 api.${CLUSTER_NAME}.${BASEDOMAIN} 2>/dev/null | grep STREAM | cut -f1 -d' ')
+	set -e
+	echo "IP=${IP}"
+	echo "VIP_API=${VIP_API}"
+	if [ "${IP}" == "${VIP_API}" ]
 	then
 		break
 	else
-		echo "Error: Cannot resolve api.${CLUSTER_NAME}.${BASEDOMAIN}"
-		exit 1
+		echo "Warning: VIP_API (${VIP_API}) is not the same as IP (${IP})"
 	fi
-	sleep 5s
+	sleep 15s
 done
-IP=$(getent ahostsv4 api.${CLUSTER_NAME}.${BASEDOMAIN} | grep STREAM | cut -f1 -d' ')
+if !getent ahostsv4 api.${CLUSTER_NAME}.${BASEDOMAIN} > /dev/null 2>&1
+then
+	echo "Error: Cannot resolve api.${CLUSTER_NAME}.${BASEDOMAIN}"
+	exit 1
+fi
+IP=$(getent ahostsv4 api.${CLUSTER_NAME}.${BASEDOMAIN} 2>/dev/null | grep STREAM | cut -f1 -d' ')
 if [ "${IP}" != "${VIP_API}" ]
 then
 	echo "Error: VIP_API (${VIP_API}) is not the same as ${IP}"
