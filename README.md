@@ -34,6 +34,8 @@ args:
 
 - `domainName` The DNS domain name for the bastion. (optional)
 
+- `enableHAProxy` defaults to `true`.  If we should install HA Proxy on the bastion node.
+
 - `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
 
 ## create-cluster
@@ -71,6 +73,8 @@ args:
 
 - `networkName` The OpenStack network to create the VM with.
 
+- `passwdHash` The password hash of the core user.
+
 - `sshPublicKey` The OpenStack ssh keyname to create the VM with.
 
 - `domainName` The DNS domain name for the bastion. (optional)
@@ -87,11 +91,11 @@ Example usage:
 `$ PowerVC-Tool watch-create --metadata ${directory}/metadata.json --kubeconfig ${directory}/auth/kubeconfig --cloud ${cloud_name} --bastionUsername ${bastion_username} --bastionRsa ${HOME}/.ssh/id_installer_rsa --baseDomain ${domain_name} --cisInstanceCRN ${ibmcloud_cis_crn} --shouldDebug false`
 
 args:
+- `cloud` the name of the cloud to use in the `~/.config/openstack/clouds.yaml` file.
+
 - `metadata` the location of the `metadata.json` file created by the IPI OpenShift installer.
 
 - `kubeconfig` the location of the `kubeconfig` file created by the IPI OpenShift installer.
-
-- `cloud` the name of the cloud to use in the `~/.config/openstack/clouds.yaml` file.
 
 - `bastionUsername` the default username for the HAProxy VM.
 
@@ -125,6 +129,10 @@ args:
 
 - `bastionRsa` the SSH private key file for the default username for the HAProxy VM.
 
+- `enableDhcpd` defaults to `false.  Enables updating the locally installed dhcp server.
+
+- `dhcpInterface` The network interface to listen for DHCPd requests.
+
 - `dhcpSubnet` The subnet to use for DHCPd requests.
 
 - `dhcpNetmask` The netmask to use for DHCPd requests.
@@ -132,6 +140,8 @@ args:
 - `dhcpRouter` The router to use for DHCPd requests.
 
 - `dhcpDnsServers` The comma separated DNS servers to use for DHCPd requests.
+
+- `dhcpServerId` The DNS server identifier for a DHCP request.
 
 - `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
 
