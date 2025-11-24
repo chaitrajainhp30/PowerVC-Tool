@@ -20,8 +20,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -74,7 +76,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		apiKey              string
 		ptrCloud            *string
 		ptrDomainName       *string
-		bastionMetadatas    stringArray
+		ptrBastionMetadata  *string
 		ptrBastionUsername  *string
 		ptrInstallerRsa     *string
 		ptrDhcpInterface    *string
@@ -101,11 +103,11 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 	ptrCloud = watchInstallationFlags.String("cloud", "", "The cloud to use in clouds.yaml")
 	ptrDomainName = watchInstallationFlags.String("domainName", "", "The DNS domain to use")
-	watchInstallationFlags.Var(&bastionMetadatas, "bastionMetadata", "A list of bastion names (can be specified multiple times)")
+	ptrBastionMetadata = watchInstallationFlags.String("bastionMetadata", "", "A root directory where OpenShift clusters installs are located")
 	ptrBastionUsername = watchInstallationFlags.String("bastionUsername", "", "The username of the bastion VM to use")
 	ptrInstallerRsa = watchInstallationFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
-	ptrDhcpInterface = watchInstallationFlags.String("dhcpInterface", "false", "The interface name for the dhcpd server")
 	ptrEnableDhcpd = watchInstallationFlags.String("enableDhcpd", "false", "Should enable the dhcpd server")
+	ptrDhcpInterface = watchInstallationFlags.String("dhcpInterface", "false", "The interface name for the dhcpd server")
 	ptrDhcpSubnet = watchInstallationFlags.String("dhcpSubnet", "", "The subnet for a DHCP request")
 	ptrDhcpNetmask = watchInstallationFlags.String("dhcpNetmask", "", "The netmask for a DHCP request")
 	ptrDhcpRouter = watchInstallationFlags.String("dhcpRouter", "", "The router for a DHCP request")
@@ -121,7 +123,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	if ptrDomainName == nil || *ptrDomainName == "" {
 		return fmt.Errorf("Error: --domainName not specified")
 	}
-	if len(bastionMetadatas) == 0 {
+	if ptrBastionMetadata == nil || *ptrBastionMetadata == "" {
 		return fmt.Errorf("Error: --bastionMetadata not specified")
 	}
 	if ptrBastionUsername == nil || *ptrBastionUsername == "" {
@@ -183,19 +185,14 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	ctx, cancel = context.WithTimeout(context.TODO(), 5*time.Minute)
 	defer cancel()
 
-	bastionInformations = make([]bastionInformation, 0)
-	for _, bastionMetadata := range bastionMetadatas {
-		bastionInformations = append(bastionInformations, bastionInformation{
-			Valid:        false,
-			Metadata:     bastionMetadata,
-			Username:     *ptrBastionUsername,
-			InstallerRsa: *ptrInstallerRsa,
-		})
-	}
-	log.Debugf("bastionInformations = %+v", bastionInformations)
-
 	for true {
 		log.Debugf("Waking up")
+
+		bastionInformations, err = gatherBastionInformations(*ptrBastionMetadata, *ptrBastionUsername, *ptrInstallerRsa)
+		if err != nil {
+			return err
+		}
+		log.Debugf("bastionInformations = %+v", bastionInformations)
 
 		ctx, cancel = context.WithTimeout(context.TODO(), 24*time.Hour)
 		defer cancel()
@@ -300,6 +297,36 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	}
 
 	return nil
+}
+
+func gatherBastionInformations(rootPath string, username string, installerRsa string) (bastionInformations []bastionInformation, err error) {
+	bastionInformations = make([]bastionInformation, 0)
+
+	err = filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// Handle the error (e.g., permission denied)
+			log.Debugf("gatherBastionInformations: Error accessing path %q: %v\n", path, err)
+
+			// Return the error to stop the walk or continue with the next entry
+			return err
+		}
+
+		// Process the current file or directory entry
+		if !d.IsDir() && strings.HasSuffix(path, "metadata.json") {
+			log.Debugf("gatherBastionInformations: FOUND: %s\n", path)
+			bastionInformations = append(bastionInformations, bastionInformation{
+				Valid:        false,
+				Metadata:     path,
+				Username:     username,
+				InstallerRsa: installerRsa,
+			})
+		}
+
+		// Return nil to continue the walk
+		return nil
+	})
+
+	return
 }
 
 type MinimalMetadata struct {
