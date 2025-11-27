@@ -31,12 +31,14 @@ func sendMetadataCommand(sendMetadataFlags *flag.FlagSet, args []string) error {
 		out            io.Writer
 		ptrMetadata    *string
 		ptrServerIP    *string
+		ptrServerPort  *string
 		ptrShouldDebug *string
 		err            error
 	)
 
 	ptrMetadata = sendMetadataFlags.String("metadata", "", "The location of the metadata.json file")
 	ptrServerIP = sendMetadataFlags.String("serverIP", "", "The IP address of the server to send the file to")
+	ptrServerPort = sendMetadataFlags.String("serverPort", "", "The port of the server to send the file to")
 	ptrShouldDebug = sendMetadataFlags.String("shouldDebug", "false", "Should output debug output")
 
 	sendMetadataFlags.Parse(args)
@@ -46,6 +48,9 @@ func sendMetadataCommand(sendMetadataFlags *flag.FlagSet, args []string) error {
 	}
 	if ptrServerIP == nil || *ptrServerIP == "" {
 		return fmt.Errorf("Error: --serverIP not specified")
+	}
+	if ptrServerPort == nil || *ptrServerPort == "" {
+		return fmt.Errorf("Error: --serverPort not specified")
 	}
 
 	switch strings.ToLower(*ptrShouldDebug) {
@@ -70,19 +75,20 @@ func sendMetadataCommand(sendMetadataFlags *flag.FlagSet, args []string) error {
 
 	fmt.Fprintf(os.Stderr, "Program version is %v, release = %v\n", version, release)
 
-	err = sendMetadata(*ptrMetadata, *ptrServerIP)
+	err = sendMetadata(*ptrMetadata, *ptrServerIP, *ptrServerPort)
 
 	return err
 }
 
-func sendMetadata(metadataFile string, serverIP string) error {
+func sendMetadata(metadataFile string, serverIP string, serverPort string) error {
 	var (
 		content []byte
 		err     error
 	)
 
+	// Avoid: address format "%s:%s" does not work with IPv6
 	// Connect to the server
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:8080", serverIP))
+	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, serverPort))
 	if err != nil {
 		return err
 	}

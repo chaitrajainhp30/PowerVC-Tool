@@ -187,8 +187,9 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	ctx, cancel = context.WithTimeout(context.TODO(), 5*time.Minute)
 	defer cancel()
 
-	// Spawn off the metadata listener
-	go listenForMetadata()
+	// Spawn off the metadata listeners
+	go listenForCreateMetadata()
+	go listenForDeleteMetadata()
 
 	for true {
 		log.Debugf("Waking up")
@@ -1261,7 +1262,7 @@ func createOrDeletePublicDNSRecord(ctx context.Context, dnsRecordType string, ho
 	return nil
 }
 
-func listenForMetadata() error {
+func listenForCreateMetadata() error {
 	// Listen for incoming connections on port 8080
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
@@ -1276,11 +1277,30 @@ func listenForMetadata() error {
 		}
 
 		// Handle the connection in a new goroutine
-		go handleConnection(conn)
+		go handleConnection(conn, true)
 	}
 }
 
-func handleConnection(conn net.Conn) error {
+func listenForDeleteMetadata() error {
+	// Listen for incoming connections on port 8081
+	ln, err := net.Listen("tcp", ":8081")
+	if err != nil {
+		return err
+	}
+
+	// Accept incoming connections and handle them
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+
+		// Handle the connection in a new goroutine
+		go handleConnection(conn, false)
+	}
+}
+
+func handleConnection(conn net.Conn, shouldCreate bool) error {
 	var (
 		buf      []byte
 		str      string
@@ -1295,6 +1315,7 @@ func handleConnection(conn net.Conn) error {
 	buf = make([]byte, 1024)
 	_, err = conn.Read(buf)
 	if err != nil {
+		log.Debugf("handleConnection: conn.Read returns %v", err)
 		return err
 	}
 
@@ -1303,23 +1324,43 @@ func handleConnection(conn net.Conn) error {
 
 	// Print the incoming data
 	log.Debugf("handleConnection: Received: %s", str)
+	log.Debugf("handleConnection: shouldCreate = %v", shouldCreate)
 
 	err = json.Unmarshal(buf, &metadata)
 	if err != nil {
-		log.Debugf("Error during Unmarshal(): %v", err)
+		log.Debugf("handleConnection: Unmarshal() returns %v", err)
 		return err
 	}
 	log.Debugf("handleConnection: metadata = %+v", metadata)
 	log.Debugf("handleConnection: metadata.ClusterName = %+v", metadata.ClusterName)
 	log.Debugf("handleConnection: metadata.InfraID = %+v", metadata.InfraID)
 
-	// Create the directory to save the metadata file in
-	err = os.MkdirAll(metadata.InfraID, os.ModePerm)
-	if err != nil {
-		return err
-	}
+	if shouldCreate {
+		// Create the directory to save the metadata file in
+		err = os.MkdirAll(metadata.InfraID, os.ModePerm)
+		if err != nil {
+			log.Debugf("handleConnection: os.MkdirAll() returns %v", err)
+			return err
+		}
 
-	err = os.WriteFile(fmt.Sprintf("%s/metadata.json", metadata.InfraID), []byte(str), 0644)
+		err = os.WriteFile(fmt.Sprintf("%s/metadata.json", metadata.InfraID), []byte(str), 0644)
+		if err != nil {
+			log.Debugf("handleConnection: os.MkdirAll() returns %v", err)
+			return err
+		}
+	} else {
+		err = os.Remove(fmt.Sprintf("%s/metadata.json", metadata.InfraID))
+		if err != nil {
+			log.Debugf("handleConnection: os.Remove(%s/metadata.json) returns %v", metadata.InfraID, err)
+			return err
+		}
+
+		err = os.Remove(metadata.InfraID)
+		if err != nil {
+			log.Debugf("handleConnection: os.Remove(%s) returns %v", metadata.InfraID, err)
+			return err
+		}
+	}
 
 	return err
 }
