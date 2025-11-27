@@ -44,6 +44,7 @@ func printUsage(executableName string) {
 		"create-bastion "+
 		"| create-rhcos "+
 		"| create-cluster "+
+		"| send-metadata "+
 		"| watch-installation "+
 		"| watch-create"+
 		" ]\n", executableName)
@@ -55,6 +56,7 @@ func main() {
 		createBastionFlags      *flag.FlagSet
 		createClusterFlags      *flag.FlagSet
 		createRhcosFlags        *flag.FlagSet
+		sendMetadataFlags       *flag.FlagSet
 		watchInstallationFlags  *flag.FlagSet
 		watchCreateClusterFlags *flag.FlagSet
 		err                     error
@@ -79,6 +81,7 @@ func main() {
 	createBastionFlags = flag.NewFlagSet("create-bastion", flag.ExitOnError)
 	createClusterFlags = flag.NewFlagSet("create-cluster", flag.ExitOnError)
 	createRhcosFlags = flag.NewFlagSet("create-rhcos", flag.ExitOnError)
+	sendMetadataFlags = flag.NewFlagSet("send-metadata", flag.ExitOnError)
 	watchInstallationFlags = flag.NewFlagSet("watch-cluster", flag.ExitOnError)
 	watchCreateClusterFlags = flag.NewFlagSet("watch-create", flag.ExitOnError)
 
@@ -91,6 +94,9 @@ func main() {
 
 	case "create-rhcos":
 		err = createRhcosCommand(createRhcosFlags, os.Args[2:])
+
+	case "send-metadata":
+		err = sendMetadataCommand(sendMetadataFlags, os.Args[2:])
 
 	case "watch-installation":
 		err = watchInstallationCommand(watchInstallationFlags, os.Args[2:])
