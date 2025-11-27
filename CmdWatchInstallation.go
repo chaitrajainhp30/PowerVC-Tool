@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -22,6 +23,7 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -185,6 +187,9 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	ctx, cancel = context.WithTimeout(context.TODO(), 5*time.Minute)
 	defer cancel()
 
+	// Spawn off the metadata listener
+	go listenForMetadata()
+
 	for true {
 		log.Debugf("Waking up")
 
@@ -192,7 +197,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		if err != nil {
 			return err
 		}
-		log.Debugf("bastionInformations = %+v", bastionInformations)
+		log.Debugf("bastionInformations [%d] = %+v", len(bastionInformations), bastionInformations)
 
 		ctx, cancel = context.WithTimeout(context.TODO(), 24*time.Hour)
 		defer cancel()
@@ -305,15 +310,15 @@ func gatherBastionInformations(rootPath string, username string, installerRsa st
 	err = filepath.WalkDir(rootPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// Handle the error (e.g., permission denied)
-			log.Debugf("gatherBastionInformations: Error accessing path %q: %v\n", path, err)
+			log.Debugf("gatherBastionInformations: Error accessing path %q: %v", path, err)
 
 			// Return the error to stop the walk or continue with the next entry
 			return err
 		}
 
 		// Process the current file or directory entry
-		if !d.IsDir() && strings.HasSuffix(path, "metadata.json") {
-			log.Debugf("gatherBastionInformations: FOUND: %s\n", path)
+		if !d.IsDir() && strings.HasSuffix(path, "/metadata.json") {
+			log.Debugf("gatherBastionInformations: FOUND: %s", path)
 			bastionInformations = append(bastionInformations, bastionInformation{
 				Valid:        false,
 				Metadata:     path,
@@ -1254,4 +1259,67 @@ func createOrDeletePublicDNSRecord(ctx context.Context, dnsRecordType string, ho
 	log.Debugf("createOrDeletePublicDNSRecord: Result.ID = %v, RawResult = %v", *result.Result.ID, response.RawResult)
 
 	return nil
+}
+
+func listenForMetadata() error {
+	// Listen for incoming connections on port 8080
+	ln, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		return err
+	}
+
+	// Accept incoming connections and handle them
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+
+		// Handle the connection in a new goroutine
+		go handleConnection(conn)
+	}
+}
+
+func handleConnection(conn net.Conn) error {
+	var (
+		buf      []byte
+		str      string
+		metadata MinimalMetadata
+		err      error
+	)
+
+	// Close the connection when we're done
+	defer conn.Close()
+
+	// Read incoming data
+	buf = make([]byte, 1024)
+	_, err = conn.Read(buf)
+	if err != nil {
+		return err
+	}
+
+	buf = bytes.Trim(buf, "\x00")
+	str = string(buf)
+
+	// Print the incoming data
+	log.Debugf("handleConnection: Received: %s", str)
+
+	err = json.Unmarshal(buf, &metadata)
+	if err != nil {
+		log.Debugf("Error during Unmarshal(): %v", err)
+		return err
+	}
+	log.Debugf("handleConnection: metadata = %+v", metadata)
+	log.Debugf("handleConnection: metadata.ClusterName = %+v", metadata.ClusterName)
+	log.Debugf("handleConnection: metadata.InfraID = %+v", metadata.InfraID)
+
+	// Create the directory to save the metadata file in
+	err = os.MkdirAll(metadata.InfraID, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(fmt.Sprintf("%s/metadata.json", metadata.InfraID), []byte(str), 0644)
+
+	return err
 }
