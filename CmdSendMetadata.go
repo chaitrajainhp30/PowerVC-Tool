@@ -153,5 +153,7 @@ func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata boo
 	// Close the connection
 	conn.Close()
 
+	log.Debugf("sendMetadata: Done!")
+
 	return nil
 }

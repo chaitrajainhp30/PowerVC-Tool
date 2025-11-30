@@ -1339,10 +1339,6 @@ func handleCreateMetadata(data string, shouldCreate bool) error {
 	log.Debugf("handleCreateMetadata: metadata.ClusterName = %+v", cmd.Metadata.ClusterName)
 	log.Debugf("handleCreateMetadata: metadata.InfraID = %+v", cmd.Metadata.InfraID)
 
-	if true {
-		return nil
-	}
-
 	if shouldCreate {
 		// Create the directory to save the metadata file in
 		err = os.MkdirAll(cmd.Metadata.InfraID, os.ModePerm)
