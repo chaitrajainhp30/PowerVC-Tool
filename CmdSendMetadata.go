@@ -96,7 +96,7 @@ type CommandHeader struct {
 
 type CommandSendMetadata struct {
 	Command  string          `json:"Command"`
-	Metadata MinimalMetadata
+	Metadata CreateMetadata
 }
 
 func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata bool) error {
