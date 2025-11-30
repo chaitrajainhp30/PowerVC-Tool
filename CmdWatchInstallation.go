@@ -15,7 +15,7 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -188,10 +188,13 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	defer cancel()
 
 	// Spawn off the metadata listeners
-	go listenForCreateMetadata()
-	go listenForDeleteMetadata()
+	go listenForCommands()
 
 	for true {
+		if true {
+			time.Sleep(30 * time.Second)
+			continue
+		}
 		log.Debugf("Waking up")
 
 		bastionInformations, err = gatherBastionInformations(*ptrBastionMetadata, *ptrBastionUsername, *ptrInstallerRsa)
@@ -1262,7 +1265,7 @@ func createOrDeletePublicDNSRecord(ctx context.Context, dnsRecordType string, ho
 	return nil
 }
 
-func listenForCreateMetadata() error {
+func listenForCommands() error {
 	// Listen for incoming connections on port 8080
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
@@ -1277,87 +1280,96 @@ func listenForCreateMetadata() error {
 		}
 
 		// Handle the connection in a new goroutine
-		go handleConnection(conn, true)
+		go handleConnection(conn)
 	}
 }
 
-func listenForDeleteMetadata() error {
-	// Listen for incoming connections on port 8081
-	ln, err := net.Listen("tcp", ":8081")
-	if err != nil {
-		return err
-	}
-
-	// Accept incoming connections and handle them
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return err
-		}
-
-		// Handle the connection in a new goroutine
-		go handleConnection(conn, false)
-	}
-}
-
-func handleConnection(conn net.Conn, shouldCreate bool) error {
+func handleConnection(conn net.Conn) error {
 	var (
-		buf      []byte
-		str      string
-		metadata MinimalMetadata
-		err      error
+		data      string
+		cmdHeader CommandHeader
+		err       error
 	)
 
 	// Close the connection when we're done
 	defer conn.Close()
 
-	// Read incoming data
-	buf = make([]byte, 1024)
-	_, err = conn.Read(buf)
-	if err != nil {
-		log.Debugf("handleConnection: conn.Read returns %v", err)
-		return err
+	scanner := bufio.NewScanner(conn)
+
+	for scanner.Scan() {
+		data = scanner.Text()
+
+		err = json.Unmarshal([]byte(data), &cmdHeader)
+		if err != nil {
+			log.Debugf("handleConnection: Unmarshal() returns %v", err)
+			return err
+		}
+		log.Debugf("handleConnection: cmdHeader = %+v", cmdHeader)
+
+		switch cmdHeader.Command {
+		case "create-metadata":
+			handleCreateMetadata(data, true)
+		case "delete-metadata":
+			handleCreateMetadata(data, false)
+		default:
+			log.Debugf("handleConnection: ERROR received unknown command %s", cmdHeader.Command)
+			return fmt.Errorf("handleConnection received unknown command %s", cmdHeader.Command)
+		}
 	}
 
-	buf = bytes.Trim(buf, "\x00")
-	str = string(buf)
+	if err := scanner.Err(); err != nil {
+		log.Debugf("handleConnection: scanner.Err return %v", err)
+	}
+
+	return err
+}
+
+func handleCreateMetadata(data string, shouldCreate bool) error {
+	var (
+		cmd CommandSendMetadata
+		err error
+	)
 
 	// Print the incoming data
-	log.Debugf("handleConnection: Received: %s", str)
-	log.Debugf("handleConnection: shouldCreate = %v", shouldCreate)
+	log.Debugf("handleCreateMetadata: Received: %s", data)
+	log.Debugf("handleCreateMetadata: shouldCreate = %v", shouldCreate)
 
-	err = json.Unmarshal(buf, &metadata)
+	err = json.Unmarshal([]byte(data), &cmd)
 	if err != nil {
-		log.Debugf("handleConnection: Unmarshal() returns %v", err)
+		log.Debugf("handleCreateMetadata: Unmarshal() returns %v", err)
 		return err
 	}
-	log.Debugf("handleConnection: metadata = %+v", metadata)
-	log.Debugf("handleConnection: metadata.ClusterName = %+v", metadata.ClusterName)
-	log.Debugf("handleConnection: metadata.InfraID = %+v", metadata.InfraID)
+	log.Debugf("handleCreateMetadata: metadata = %+v", cmd.Metadata)
+	log.Debugf("handleCreateMetadata: metadata.ClusterName = %+v", cmd.Metadata.ClusterName)
+	log.Debugf("handleCreateMetadata: metadata.InfraID = %+v", cmd.Metadata.InfraID)
+
+	if true {
+		return nil
+	}
 
 	if shouldCreate {
 		// Create the directory to save the metadata file in
-		err = os.MkdirAll(metadata.InfraID, os.ModePerm)
+		err = os.MkdirAll(cmd.Metadata.InfraID, os.ModePerm)
 		if err != nil {
-			log.Debugf("handleConnection: os.MkdirAll() returns %v", err)
+			log.Debugf("handleCreateMetadata: os.MkdirAll() returns %v", err)
 			return err
 		}
 
-		err = os.WriteFile(fmt.Sprintf("%s/metadata.json", metadata.InfraID), []byte(str), 0644)
+		err = os.WriteFile(fmt.Sprintf("%s/metadata.json", cmd.Metadata.InfraID), []byte(data), 0644)
 		if err != nil {
-			log.Debugf("handleConnection: os.MkdirAll() returns %v", err)
+			log.Debugf("handleCreateMetadata: os.MkdirAll() returns %v", err)
 			return err
 		}
 	} else {
-		err = os.Remove(fmt.Sprintf("%s/metadata.json", metadata.InfraID))
+		err = os.Remove(fmt.Sprintf("%s/metadata.json", cmd.Metadata.InfraID))
 		if err != nil {
-			log.Debugf("handleConnection: os.Remove(%s/metadata.json) returns %v", metadata.InfraID, err)
+			log.Debugf("handleCreateMetadata: os.Remove(%s/metadata.json) returns %v", cmd.Metadata.InfraID, err)
 			return err
 		}
 
-		err = os.Remove(metadata.InfraID)
+		err = os.Remove(cmd.Metadata.InfraID)
 		if err != nil {
-			log.Debugf("handleConnection: os.Remove(%s) returns %v", metadata.InfraID, err)
+			log.Debugf("handleCreateMetadata: os.Remove(%s) returns %v", cmd.Metadata.InfraID, err)
 			return err
 		}
 	}

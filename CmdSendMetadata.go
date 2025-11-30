@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -28,29 +29,38 @@ import (
 
 func sendMetadataCommand(sendMetadataFlags *flag.FlagSet, args []string) error {
 	var (
-		out            io.Writer
-		ptrMetadata    *string
-		ptrServerIP    *string
-		ptrServerPort  *string
-		ptrShouldDebug *string
-		err            error
+		out                  io.Writer
+		ptrCreateMetadata    *string
+		ptrDeleteMetadata    *string
+		ptrServerIP          *string
+		ptrShouldDebug       *string
+		shouldCreateMetadata bool
+		shouldDeleteMetadata bool
+		metadataFile         string
+		err                  error
 	)
 
-	ptrMetadata = sendMetadataFlags.String("metadata", "", "The location of the metadata.json file")
-	ptrServerIP = sendMetadataFlags.String("serverIP", "", "The IP address of the server to send the file to")
-	ptrServerPort = sendMetadataFlags.String("serverPort", "", "The port of the server to send the file to")
+	ptrCreateMetadata = sendMetadataFlags.String("createMetadata", "", "Create the metadata of this file")
+	ptrDeleteMetadata = sendMetadataFlags.String("deleteMetadata", "", "Delete the metadata of this file")
+	ptrServerIP = sendMetadataFlags.String("serverIP", "", "The IP address of the server to send the command to")
 	ptrShouldDebug = sendMetadataFlags.String("shouldDebug", "false", "Should output debug output")
 
 	sendMetadataFlags.Parse(args)
 
-	if ptrMetadata == nil || *ptrMetadata == "" {
-		return fmt.Errorf("Error: --metadata not specified")
+	if ptrCreateMetadata != nil && *ptrCreateMetadata != "" {
+		shouldCreateMetadata = true
+		metadataFile = *ptrCreateMetadata
+	}
+	if ptrDeleteMetadata != nil && *ptrDeleteMetadata != "" {
+		shouldDeleteMetadata = true
+		metadataFile = *ptrDeleteMetadata
+	}
+
+	if !shouldCreateMetadata && !shouldDeleteMetadata {
+		return fmt.Errorf("Error: Either --createMetadata or --deleteMetadata should be specified")
 	}
 	if ptrServerIP == nil || *ptrServerIP == "" {
 		return fmt.Errorf("Error: --serverIP not specified")
-	}
-	if ptrServerPort == nil || *ptrServerPort == "" {
-		return fmt.Errorf("Error: --serverPort not specified")
 	}
 
 	switch strings.ToLower(*ptrShouldDebug) {
@@ -75,33 +85,68 @@ func sendMetadataCommand(sendMetadataFlags *flag.FlagSet, args []string) error {
 
 	fmt.Fprintf(os.Stderr, "Program version is %v, release = %v\n", version, release)
 
-	err = sendMetadata(*ptrMetadata, *ptrServerIP, *ptrServerPort)
+	err = sendMetadata(metadataFile, *ptrServerIP, shouldCreateMetadata)
 
 	return err
 }
 
-func sendMetadata(metadataFile string, serverIP string, serverPort string) error {
+type CommandHeader struct {
+        Command string `json:"Command"`
+}
+
+type CommandSendMetadata struct {
+	Command  string          `json:"Command"`
+	Metadata MinimalMetadata
+}
+
+func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata bool) error {
 	var (
-		content []byte
-		err     error
+		content        []byte
+		cmd            CommandSendMetadata
+		marshalledData []byte
+		err            error
 	)
 
 	// Avoid: address format "%s:%s" does not work with IPv6
 	// Connect to the server
-	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, serverPort))
+	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, "8080"))
 	if err != nil {
+		log.Debugf("sendMetadata: net.Dial return %v", err)
 		return err
 	}
 
+	// Read metadata.json into a buffer
 	content, err = ioutil.ReadFile(metadataFile)
 	if err != nil {
+		log.Debugf("sendMetadata: ioutil.ReadFile return %v", err)
 		return err
 	}
 	log.Debugf("sendMetadata: content = %s", content)
 
-	// Send some data to the server
-	_, err = conn.Write(content)
+	// Create the command JSON structure
+	if shouldCreateMetadata {
+		cmd.Command = "create-metadata"
+	} else {
+		cmd.Command = "delete-metadata"
+	}
+	err = json.Unmarshal(content, &cmd.Metadata)
 	if err != nil {
+		log.Debugf("sendMetadata: json.Unmarshal return %v", err)
+		return err
+	}
+	log.Debugf("sendMetadata: cmd = %+v", cmd)
+
+	marshalledData, err = json.Marshal(cmd)
+	if err != nil {
+		log.Debugf("sendMetadata: json.Marshal return %v", err)
+		return err
+	}
+	log.Debugf("sendMetadata: marshalledData = %v", string(marshalledData))
+
+	// Send some data to the server
+	_, err = conn.Write(marshalledData)
+	if err != nil {
+		log.Debugf("sendMetadata: conn.Write return %v", err)
 		return err
 	}
 
