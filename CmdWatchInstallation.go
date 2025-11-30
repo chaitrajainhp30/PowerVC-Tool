@@ -191,10 +191,6 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	go listenForCommands()
 
 	for true {
-		if true {
-			time.Sleep(30 * time.Second)
-			continue
-		}
 		log.Debugf("Waking up")
 
 		bastionInformations, err = gatherBastionInformations(*ptrBastionMetadata, *ptrBastionUsername, *ptrInstallerRsa)
