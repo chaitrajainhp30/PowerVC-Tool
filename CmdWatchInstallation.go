@@ -1322,8 +1322,9 @@ func handleConnection(conn net.Conn) error {
 
 func handleCreateMetadata(data string, shouldCreate bool) error {
 	var (
-		cmd CommandSendMetadata
-		err error
+		cmd            CommandSendMetadata
+		marshalledData []byte
+		err            error
 	)
 
 	// Print the incoming data
@@ -1335,9 +1336,15 @@ func handleCreateMetadata(data string, shouldCreate bool) error {
 		log.Debugf("handleCreateMetadata: Unmarshal() returns %v", err)
 		return err
 	}
-	log.Debugf("handleCreateMetadata: metadata = %+v", cmd.Metadata)
-	log.Debugf("handleCreateMetadata: metadata.ClusterName = %+v", cmd.Metadata.ClusterName)
-	log.Debugf("handleCreateMetadata: metadata.InfraID = %+v", cmd.Metadata.InfraID)
+	log.Debugf("handleCreateMetadata: cmd.metadata = %+v", cmd.Metadata)
+	log.Debugf("handleCreateMetadata: cmd.metadata.ClusterName = %+v", cmd.Metadata.ClusterName)
+	log.Debugf("handleCreateMetadata: cmd.metadata.InfraID = %+v", cmd.Metadata.InfraID)
+
+	marshalledData, err = json.Marshal(cmd.Metadata)
+	if err != nil {
+		log.Debugf("handleCreateMetadata: json.Marshal() returns %v", err)
+		return err
+	}
 
 	if shouldCreate {
 		// Create the directory to save the metadata file in
@@ -1347,7 +1354,7 @@ func handleCreateMetadata(data string, shouldCreate bool) error {
 			return err
 		}
 
-		err = os.WriteFile(fmt.Sprintf("%s/metadata.json", cmd.Metadata.InfraID), []byte(data), 0644)
+		err = os.WriteFile(fmt.Sprintf("%s/metadata.json", cmd.Metadata.InfraID), marshalledData, 0644)
 		if err != nil {
 			log.Debugf("handleCreateMetadata: os.MkdirAll() returns %v", err)
 			return err
