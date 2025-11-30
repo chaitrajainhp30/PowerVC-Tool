@@ -5,6 +5,7 @@ CLI opitons:
 - [create-bastion](https://github.com/hamzy/PowerVC-Tool#create-bastion)
 - [create-cluster](https://github.com/hamzy/PowerVC-Tool#create-cluster)
 - [create-rhcos](https://github.com/hamzy/PowerVC-Tool#create-rhcos)
+- [send-metadata](https://github.com/hamzy/PowerVC-Tool#send-metadata)
 - [watch-create](https://github.com/hamzy/PowerVC-Tool#watch-create)
 - [watch-installation](https://github.com/hamzy/PowerVC-Tool#watch-installation)
 
@@ -78,6 +79,24 @@ args:
 - `sshPublicKey` The OpenStack ssh keyname to create the VM with.
 
 - `domainName` The DNS domain name for the bastion. (optional)
+
+- `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
+
+## send-metadata
+
+This will send a command to the server to either create or delete a local copy of the metadata.json file.
+
+Example usage:
+
+`$ PowerVC-Tool send-metadata --createMetadata ${directory}/metadata.json --serverIP ${serverIP} --shouldDebug true
+
+args:
+
+- `createMetadata` Tells the server to create a local copy of this metadata.json file.
+
+- `deleteMetadata` Tells the server to delete a local copy of this metadata.json file.
+
+- `serverIP` The IP address of the server.
 
 - `shouldDebug` defauts to `false`.  This will cause the program to output verbose debugging information.
 
