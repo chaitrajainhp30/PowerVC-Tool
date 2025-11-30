@@ -88,9 +88,6 @@ func watchCreateClusterCommand(watchCreateClusterFlags *flag.FlagSet, args []str
 	if *ptrMetadata == "" {
 		return fmt.Errorf("Error: No metadata file location iset, use -metadata")
 	}
-	if *ptrKubeConfig == "" {
-		return fmt.Errorf("Error: No KUBECONFIG key set, use -kubeconfig")
-	}
 	if ptrBastionUsername == nil || *ptrBastionUsername == "" {
 		return fmt.Errorf("Error: --bastionUsername not specified")
 	}
@@ -104,7 +101,9 @@ func watchCreateClusterCommand(watchCreateClusterFlags *flag.FlagSet, args []str
 	}
 
 	robjsFuncs = make([]NewRunnableObjectsEntry, 0)
-	robjsFuncs = append(robjsFuncs, NewRunnableObjectsEntry{NewOc,           "OpenShift Cluster"})
+	if *ptrKubeConfig != "" {
+		robjsFuncs = append(robjsFuncs, NewRunnableObjectsEntry{NewOc, "OpenShift Cluster"})
+	}
 	robjsFuncs = append(robjsFuncs, NewRunnableObjectsEntry{NewVMs,          "Virtual Machines"})
 	robjsFuncs = append(robjsFuncs, NewRunnableObjectsEntry{NewLoadBalancer, "Load Balancer"})
 	if *ptrBaseDomain != "" && *ptrCisInstanceCRN != "" {
