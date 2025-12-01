@@ -1,0 +1,213 @@
+- hosts:
+    all
+
+  vars:
+
+  tasks:
+
+    - name: Check if username is empty
+      ansible.builtin.fail:
+        msg: "The variable 'username' is empty or not defined. Please provide a value."
+      when: username | default('') | length == 0
+
+    - name: Check if password is empty
+      ansible.builtin.fail:
+        msg: "The variable 'password' is empty or not defined. Please provide a value."
+      when: password | default('') | length == 0
+
+    - name: Check if project_id is empty
+      ansible.builtin.fail:
+        msg: "The variable 'project_id' is empty or not defined. Please provide a value."
+      when: project_id | default('') | length == 0
+
+    - name: Gather all facts
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "interfaces"
+
+    - name: Show facts
+      debug:
+        msg:
+          - "{{ ansible_interfaces }}"
+
+    - name: Get list of non-loopback interfaces
+      ansible.builtin.set_fact:
+        ethernet_interfaces: >-
+          {{ ansible_interfaces | reject('equalto', 'lo') | list }}
+      run_once: true
+
+    - name: Show facts
+      debug:
+        msg:
+          - "{{ ethernet_interfaces }}"
+          - "{{ ethernet_interfaces[0] }}"
+
+    - name: Install packages
+      yum:
+        name: "{{ packages }}"
+      vars:
+        packages:
+          - dhcp-server
+          - git
+          - make
+          - patch
+          - podman
+          - tmux
+          - zip
+          - dnf-plugins-core
+      become: yes
+
+    - name: Create /etc/dhcp/dhcpd.conf
+      ansible.builtin.copy:
+        dest: /etc/dhcp/dhcpd.conf
+        content: |
+          persistent;
+
+          default-lease-time 2678400;
+          max-lease-time 2678400;
+
+          subnet 10.130.32.0 netmask 255.255.240.0 {
+             interface {{ ethernet_interfaces[0] }};
+             option routers 10.130.32.1;
+             option subnet-mask 10.130.32.0;
+             option domain-name-servers 10.2.70.215, 10.11.5.160, 8.8.8.8;
+             option domain-name "powervs-openshift-ipi.cis.ibm.net";
+             option dhcp-server-identifier 10.130.41.117;
+             ignore unknown-clients;
+          #  update-static-leases true;
+          }
+        mode: '0644'
+        owner: root
+        group: root
+      become: yes
+
+    - name: systemctl dhcpd
+      ansible.builtin.systemd:
+        name: dhcpd.service
+        state: started
+        enabled: true
+      become: yes
+
+    - name: configure CRB
+      shell: |
+        (
+          sudo dnf config-manager --set-enabled crb
+        ) 
+      become: yes
+
+    - name: Install packages
+      yum:
+        name: "{{ packages }}"
+      vars:
+        packages:
+          - centos-release-openstack-dalmatian
+      become: yes
+
+    - name: Install packages
+      yum:
+        name: "{{ packages }}"
+      vars:
+        packages:
+          - python3-openstackclient
+      become: yes
+
+    - name: Git checkout PowerVC-Tool
+      ansible.builtin.git:
+        repo: 'https://github.com/hamzy/PowerVC-Tool.git'
+        dest: /home/cloud-user/PowerVC-Tool
+        version: main
+
+    - name: Get PowerVC-Tool status
+      stat:
+        path: /home/cloud-user/PowerVC-Tool/PowerVC-Tool
+      register: pvct_stat
+
+    - name: Install PowerVC-Tool
+      shell: |
+        (
+          cd ~/PowerVC-Tool/
+          TAG=$(git describe --abbrev=0 --tags)
+          curl --silent --location --remote-name https://github.com/hamzy/PowerVC-Tool/releases/download/${TAG}/PowerVC-Tool-${TAG}-linux-ppc64le.tar.gz
+          tar xvf PowerVC-Tool-${TAG}-linux-ppc64le.tar.gz 
+        ) 
+      when: not pvct_stat.stat.exists
+
+    - name: Git checkout installer
+      ansible.builtin.git:
+        repo: 'https://github.com/openshift/installer.git'
+        dest: /home/cloud-user/installer
+        version: main
+
+    - name: Get Go directory
+      stat:
+        path: /usr/local/go/
+      register: go_stat
+
+    - name: Install Go
+      shell: |
+        (
+          curl --location --remote-name https://go.dev/dl/go1.25.4.linux-ppc64le.tar.gz && tar -C /usr/local -xzf go1.25.4.linux-ppc64le.tar.gz
+        ) 
+      become: yes
+
+    - name: Create a new directory
+      ansible.builtin.file:
+        path: /home/cloud-user/.config/openstack/
+        state: directory
+        owner: cloud-user
+        group: cloud-user
+        mode: '0755'
+        recurse: yes
+
+    - name: Create /home/cloud-user/.config/openstack/clouds.yaml
+      ansible.builtin.copy:
+        dest: /home/cloud-user/.config/openstack/clouds.yaml
+        content: |
+          clouds:
+            ocp-ci:
+              auth:
+                auth_url: https://10.130.38.240:5000
+                username: "{{ username }}"
+                password: "{{ password }}"
+                project_id: "{{ project_id }}"
+                project_name: "ocp-ci"
+                user_domain_name: "Default"
+              cacert: /home/cloud-user/.config/openstack/ocp-ci-ca.pem
+              interface: "public"
+              identity_api_version: 3
+        mode: '0644'
+        owner: cloud-user
+        group: cloud-user
+
+    - name: Copy ocp-ci-ca.pem over to /home/cloud-user/.config/openstack/ocp-ci-ca.pem
+      ansible.builtin.copy:
+        src: ocp-ci-ca.pem
+        dest: /home/cloud-user/.config/openstack/ocp-ci-ca.pem
+        owner: cloud-user
+        group: cloud-user
+        mode: '0644'
+
+    - name: Create bin directory
+      ansible.builtin.file:
+        path: /home/cloud-user/bin
+        state: directory
+        owner: cloud-user
+        group: cloud-user
+        mode: '0755'
+        recurse: yes
+
+    - name: Get oc status
+      stat:
+        path: /home/cloud-user/bin/oc
+      register: oc_stat
+
+    - name: Install oc
+      shell: |
+        (
+          cd ~/bin/
+          /bin/rm oc kubectl
+          curl --silent --location --remote-name https://mirror.openshift.com/pub/openshift-v4/ppc64le/clients/ocp/4.19.9/openshift-client-linux-ppc64le-rhel9-4.19.9.tar.gz
+          tar xvf openshift-client-linux-ppc64le-rhel9-4.19.9.tar.gz oc kubectl
+        ) 
+      when: not oc_stat.stat.exists
