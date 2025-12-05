@@ -1304,9 +1304,11 @@ func handleConnection(conn net.Conn) error {
 
 		switch cmdHeader.Command {
 		case "create-metadata":
-			handleCreateMetadata(data, true)
+			go handleCreateMetadata(data, true)
 		case "delete-metadata":
-			handleCreateMetadata(data, false)
+			go handleCreateMetadata(data, false)
+		case "create-bastion":
+			go handleCreateBastion(data)
 		default:
 			log.Debugf("handleConnection: ERROR received unknown command %s", cmdHeader.Command)
 			return fmt.Errorf("handleConnection received unknown command %s", cmdHeader.Command)
@@ -1374,4 +1376,31 @@ func handleCreateMetadata(data string, shouldCreate bool) error {
 	}
 
 	return err
+}
+
+func handleCreateBastion(data string) error {
+	var (
+		cmd    CommandCreateBastion
+		ctx    context.Context
+		cancel context.CancelFunc
+		err    error
+	)
+
+	// Print the incoming data
+	log.Debugf("handleCreateBastion: Received: %s", data)
+
+	err = json.Unmarshal([]byte(data), &cmd)
+	if err != nil {
+		log.Debugf("handleCreateBastion: Unmarshal() returns %v", err)
+		return err
+	}
+	log.Debugf("handleCreateBastion: cmd.Command    = %s", cmd.Command)
+	log.Debugf("handleCreateBastion: cmd.CloudName  = %s", cmd.CloudName)
+	log.Debugf("handleCreateBastion: cmd.ServerName = %s", cmd.ServerName)
+	log.Debugf("handleCreateBastion: cmd.DomainName = %s", cmd.DomainName)
+
+	ctx, cancel = context.WithTimeout(context.TODO(), 10*time.Minute)
+	defer cancel()
+
+	return setupBastionServer(ctx, cmd.CloudName, cmd.ServerName, cmd.DomainName)
 }

@@ -54,7 +54,6 @@ var (
 func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error {
 	var (
 		out            io.Writer
-		apiKey         string
 		ptrCloud       *string
 		ptrBastionName *string
 		ptrFlavorName  *string
@@ -63,15 +62,12 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		ptrSshKeyName  *string
 		ptrDomainName  *string
 		ptrEnableHAP   *string
+		ptrServerIP    *string
 		ptrShouldDebug *string
 		ctx            context.Context
 		cancel         context.CancelFunc
-		foundServer    servers.Server
 		err            error
 	)
-
-	// NOTE: This is optional
-	apiKey = os.Getenv("IBMCLOUD_API_KEY")
 
 	ptrCloud = createBastionFlags.String("cloud", "", "The cloud to use in clouds.yaml")
 	ptrBastionName = createBastionFlags.String("bastionName", "", "The name of the bastion VM to use")
@@ -82,6 +78,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 	// NOTE: This is optional
 	ptrDomainName = createBastionFlags.String("domainName", "", "The DNS domain to use")
 	ptrEnableHAP = createBastionFlags.String("enableHAProxy", "false", "Should install and enable HA Proxy demon")
+	ptrServerIP = createBastionFlags.String("serverIP", "", "The IP address of the server to send the command to")
 	ptrShouldDebug = createBastionFlags.String("shouldDebug", "false", "Should output debug output")
 
 	createBastionFlags.Parse(args)
@@ -147,8 +144,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		}
 	}
 
-	foundServer, err = findServer(ctx, *ptrCloud, *ptrBastionName)
-//	log.Debugf("foundServer = %+v", foundServer)
+	_, err = findServer(ctx, *ptrCloud, *ptrBastionName)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "Could not find server named") {
 			fmt.Printf("Could not find server %s, creating...\n", *ptrBastionName)
@@ -167,28 +163,18 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 			}
 
 			fmt.Println("Done!")
-
-			foundServer, err = findServer(ctx, *ptrCloud, *ptrBastionName)
-			if err != nil {
-				return err
-			}
 		} else {
 			return err
 		}
 	}
 
-	err = setupBastionServer(ctx, *ptrCloud, foundServer)
+	if ptrServerIP != nil && *ptrServerIP != "" {
+		err = sendCreateBastion(*ptrServerIP, *ptrCloud, *ptrBastionName, *ptrDomainName)
+	} else {
+		err = setupBastionServer(ctx, *ptrCloud, *ptrBastionName, *ptrDomainName)
+	}
 	if err != nil {
 		return err
-	}
-
-	if apiKey != "" {
-		err = dnsForServer(ctx, *ptrCloud, apiKey, *ptrBastionName, *ptrDomainName)
-		if err != nil {
-			return err
-		}
-	} else {
-		fmt.Println("Warning: IBMCLOUD_API_KEY not set.  Make sure DNS is supported via another way.")
 	}
 
 	return err
@@ -312,18 +298,24 @@ func createServer(ctx context.Context, cloudName string, flavorName string, imag
 	return err
 }
 
-func setupBastionServer(ctx context.Context, cloudName string, server servers.Server) error {
+func setupBastionServer(ctx context.Context, cloudName string, serverName string, domainName string) error {
 	var (
+		server       servers.Server
 		ipAddress    string
 		homeDir      string
 		installerRsa string
 		outb         []byte
 		outs         string
 		exitError    *exec.ExitError
+		apiKey       string
 		err          error
 	)
 
+	server, err = findServer(ctx, cloudName, serverName)
 	log.Debugf("setupBastionServer: server = %+v", server)
+	if err != nil {
+		return err
+	}
 
 	_, ipAddress, err = findIpAddress(server)
 	if err != nil {
@@ -528,6 +520,18 @@ func setupBastionServer(ctx context.Context, cloudName string, server servers.Se
 	fileBastionIp.Write([]byte(ipAddress))
 
 	defer fileBastionIp.Close()
+
+	// NOTE: This is optional
+	apiKey = os.Getenv("IBMCLOUD_API_KEY")
+
+	if apiKey != "" {
+		err = dnsForServer(ctx, cloudName, apiKey, serverName, domainName)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("Warning: IBMCLOUD_API_KEY not set.  Make sure DNS is supported via another way.")
+	}
 
 	return err
 }
