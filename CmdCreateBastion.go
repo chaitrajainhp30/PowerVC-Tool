@@ -177,7 +177,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		return err
 	}
 
-	return err
+	return writeBastionIP(ctx, *ptrCloud, *ptrBastionName)
 }
 
 func createServer(ctx context.Context, cloudName string, flavorName string, imageName string, networkName string, sshKeyName string, bastionName string, userData []byte) error {
@@ -512,15 +512,6 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		}
 	}
 
-	fileBastionIp, err := os.OpenFile(bastionIpFilename, os.O_CREATE|os.O_RDWR, 0644)
-	if err != nil {
-		return err
-	}
-
-	fileBastionIp.Write([]byte(ipAddress))
-
-	defer fileBastionIp.Close()
-
 	// NOTE: This is optional
 	apiKey = os.Getenv("IBMCLOUD_API_KEY")
 
@@ -534,6 +525,41 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 	}
 
 	return err
+}
+
+func writeBastionIP(ctx context.Context, cloudName string, serverName string) error {
+	var (
+		server       servers.Server
+		ipAddress    string
+		err          error
+	)
+
+	server, err = findServer(ctx, cloudName, serverName)
+	log.Debugf("writeBastionIP: server = %+v", server)
+	if err != nil {
+		return err
+	}
+
+	_, ipAddress, err = findIpAddress(server)
+	if err != nil {
+		return err
+	}
+	if ipAddress == "" {
+		return fmt.Errorf("ip address is empty for server %s", server.Name)
+	}
+
+	log.Debugf("writeBastionIP: ipAddress = %s", ipAddress)
+
+	fileBastionIp, err := os.OpenFile(bastionIpFilename, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return err
+	}
+
+	fileBastionIp.Write([]byte(ipAddress))
+
+	defer fileBastionIp.Close()
+
+	return nil
 }
 
 func removeCommentLines(input string) string {

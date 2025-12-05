@@ -246,11 +246,12 @@ func findServer(ctx context.Context, cloudName string, name string) (foundServer
 	}
 
 	for _, server = range allServers {
-		log.Debugf("findServer: server.Name = %s, server.ID = %s", server.Name, server.ID)
-
 		if server.Name == name {
+			log.Debugf("findServer: FOUND server.Name = %s, server.ID = %s", server.Name, server.ID)
 			foundServer = server
 			return
+		} else {
+			log.Debugf("findServer: SKIP  server.Name = %s, server.ID = %s", server.Name, server.ID)
 		}
 	}
 
