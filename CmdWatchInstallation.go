@@ -1018,7 +1018,7 @@ func getServiceInfo(ctx context.Context, apiKey string, service string, serviceP
 	// TO-DO need to explore paging for catalog list since ListCatalogEntriesOptions does not take start
 	include := "*"
 	listCatalogEntriesOpt := globalcatalogv1.ListCatalogEntriesOptions{Include: &include, Q: &service}
-	catalogEntriesList, _, err := gcv1.ListCatalogEntriesWithContext(ctx, &listCatalogEntriesOpt)
+	catalogEntriesList, _, err := listCatalogEntries(ctx, gcv1, &listCatalogEntriesOpt)
 	if err != nil {
 		return "", "", err
 	}
@@ -1045,7 +1045,7 @@ func getServiceInfo(ctx context.Context, apiKey string, service string, serviceP
 
 	var childObjResult *globalcatalogv1.EntrySearchResult
 
-	childObjResult, _, err = gcv1.GetChildObjectsWithContext(ctx, &getChildOpt)
+	childObjResult, _, err = GetChildObjects(ctx, gcv1, &getChildOpt)
 	if err != nil {
 		return "", "", err
 	}
@@ -1092,8 +1092,7 @@ func getDomainCrn(ctx context.Context, apiKey string, cisServiceID string, baseD
 	log.Debugf("getDomainCrn: listResourceOptions = %+v", listResourceOptions)
 
 	for moreData {
-		// https://github.com/IBM/platform-services-go-sdk/blob/main/resourcecontrollerv2/resource_controller_v2.go#L5008
-		resources, _, err = controllerSvc.ListResourceInstancesWithContext(ctx, &listResourceOptions)
+		resources, _, err = listResourceInstances(ctx, controllerSvc, &listResourceOptions)
 		if err != nil {
 			err = fmt.Errorf("ListResourceInstancesWithContext failed with: %v", err)
 			return
@@ -1115,7 +1114,7 @@ func getDomainCrn(ctx context.Context, apiKey string, cisServiceID string, baseD
 				return
 			}
 
-			zoneList, _, err = zv1.ListZonesWithContext(ctx, &zonesv1.ListZonesOptions{})
+			zoneList, _, err = listZones(ctx, zv1, &zonesv1.ListZonesOptions{})
 			if err != nil {
 				err = fmt.Errorf("ListZonesWithContext failed with: %v", err)
 				return
@@ -1172,7 +1171,7 @@ func findDNSRecord(ctx context.Context, dnsService *dnsrecordsv1.DnsRecordsV1, c
 	listOptions.SetName(cname)
 //	log.Debugf("findDNSRecord: listOptions = %+v", listOptions)
 
-	records, response, err = dnsService.ListAllDnsRecordsWithContext(ctx, listOptions)
+	records, response, err = listAllDnsRecords(ctx, dnsService, listOptions)
 	if err != nil {
 		err = fmt.Errorf("ListAllDnsRecordsWithContext response = %+v, err = %+v", response, err)
 		return
@@ -1219,7 +1218,7 @@ func createOrDeletePublicDNSRecord(ctx context.Context, dnsRecordType string, ho
 			deleteOptions = dnsService.NewDeleteDnsRecordOptions(foundRecordID)
 			log.Debugf("createOrDeletePublicDNSRecord: deleteOptions = %+v", deleteOptions)
 
-			result, response, err := dnsService.DeleteDnsRecordWithContext(ctx, deleteOptions)
+			result, response, err := deleteDnsRecord(ctx, dnsService, deleteOptions)
 			if err != nil {
 				return fmt.Errorf("DeleteDnsRecordWithContext response = %+v, err = %+v", response, err)
 			}
@@ -1251,9 +1250,9 @@ func createOrDeletePublicDNSRecord(ctx context.Context, dnsRecordType string, ho
 	createOptions.SetTTL(60)
 	log.Debugf("createOrDeletePublicDNSRecord: createOptions = %+v", createOptions)
 
-	result, response, err := dnsService.CreateDnsRecord(createOptions)
+	result, response, err := createDnsRecord(ctx, dnsService, createOptions)
 	if err != nil {
-		log.Errorf("dnsRecordService.CreateDnsRecord returns %v", err)
+		log.Errorf("dnsRecordService.CreateDnsRecordWithContext returns %v", err)
 		return err
 	}
 	log.Debugf("createOrDeletePublicDNSRecord: Result.ID = %v, RawResult = %v", *result.Result.ID, response.RawResult)
