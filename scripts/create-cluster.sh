@@ -60,7 +60,7 @@ then
 	exit 1
 fi
 
-MACHINE_NETWORK=$(openstack --os-cloud=${CLOUD} network show "${SUBNET_ID}" --format shell | grep ^cidr)
+MACHINE_NETWORK=$(openstack --os-cloud=${CLOUD} subnet show "${SUBNET_ID}" --format shell | grep ^cidr)
 if [ -z "${MACHINE_NETWORK}" ]
 then
 	echo "Error: MACHINE_NETWORK is empty!"
