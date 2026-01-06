@@ -146,6 +146,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 
 	_, err = findServer(ctx, *ptrCloud, *ptrBastionName)
 	if err != nil {
+		log.Debugf("findServer(first) returns %+v", err)
 		if strings.HasPrefix(err.Error(), "Could not find server named") {
 			fmt.Printf("Could not find server %s, creating...\n", *ptrBastionName)
 
@@ -168,13 +169,25 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		}
 	}
 
+	// It should exist now
+	_, err = findServer(ctx, *ptrCloud, *ptrBastionName)
+	if err != nil {
+		log.Debugf("findServer(second) returns %+v", err)
+		return err
+	}
+
+	// Make sure it has been set up
+	err = setupBastionServer(ctx, *ptrCloud, *ptrBastionName, *ptrDomainName)
+	if err != nil {
+		log.Debugf("setupBastionServer returns %+v", err)
+		return err
+	}
+
 	if ptrServerIP != nil && *ptrServerIP != "" {
 		err = sendCreateBastion(*ptrServerIP, *ptrCloud, *ptrBastionName, *ptrDomainName)
-	} else {
-		err = setupBastionServer(ctx, *ptrCloud, *ptrBastionName, *ptrDomainName)
-	}
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	return writeBastionIP(ctx, *ptrCloud, *ptrBastionName)
