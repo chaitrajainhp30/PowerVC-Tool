@@ -176,16 +176,17 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		return err
 	}
 
-	// Make sure it has been set up
-	err = setupBastionServer(ctx, *ptrCloud, *ptrBastionName, *ptrDomainName)
-	if err != nil {
-		log.Debugf("setupBastionServer returns %+v", err)
-		return err
-	}
-
 	if ptrServerIP != nil && *ptrServerIP != "" {
+		// Ask to set it up remotely
 		err = sendCreateBastion(*ptrServerIP, *ptrCloud, *ptrBastionName, *ptrDomainName)
 		if err != nil {
+			return err
+		}
+	} else {
+		// Set it up locally
+		err = setupBastionServer(ctx, *ptrCloud, *ptrBastionName, *ptrDomainName)
+		if err != nil {
+			log.Debugf("setupBastionServer returns %+v", err)
 			return err
 		}
 	}

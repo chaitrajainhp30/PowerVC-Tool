@@ -45,6 +45,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+//	scanner := bufio.NewScanner(conn)
+//	for scanner.Scan() {
+//		data = scanner.Text()
+// vs
+
+//	reader := bufio.NewReader(conn)
+//	for {
+//		data, err = reader.ReadString('\n')
+// vs
+
 // stringArray is a custom type to hold an array of strings.
 type stringArray []string
 
@@ -1283,16 +1293,22 @@ func handleConnection(conn net.Conn) error {
 	var (
 		data      string
 		cmdHeader CommandHeader
+		errChan   chan error
+		result    error
 		err       error
 	)
 
 	// Close the connection when we're done
 	defer conn.Close()
 
-	scanner := bufio.NewScanner(conn)
+	reader := bufio.NewReader(conn)
 
-	for scanner.Scan() {
-		data = scanner.Text()
+	for {
+		data, err = reader.ReadString('\n')
+		if err != nil {
+			log.Debugf("handleConnection: reader.ReadString() returns %v", err)
+			return err
+		}
 
 		err = json.Unmarshal([]byte(data), &cmdHeader)
 		if err != nil {
@@ -1301,27 +1317,56 @@ func handleConnection(conn net.Conn) error {
 		}
 		log.Debugf("handleConnection: cmdHeader = %+v", cmdHeader)
 
+		errChan = make(chan error)
+
 		switch cmdHeader.Command {
 		case "create-metadata":
-			go handleCreateMetadata(data, true)
+			go handleCreateMetadata(data, true, errChan)
+			result = <-errChan
+			log.Debugf("handleConnection: result from handleCreateMetadata is %v", result)
+
 		case "delete-metadata":
-			go handleCreateMetadata(data, false)
+			go handleCreateMetadata(data, false, errChan)
+			result = <-errChan
+			log.Debugf("handleConnection: result from handleCreateMetadata is %v", result)
+
 		case "create-bastion":
-			go handleCreateBastion(data)
+			var (
+				cmd            CommandBastionCreated
+				marshalledData []byte
+			)
+
+			go handleCreateBastion(data, errChan)
+			result = <-errChan
+			log.Debugf("handleConnection: result from handleCreateBastion is %v", result)
+
+			log.Debugf("handleConnection: waiting on result from handleCreateBastion")
+			cmd.Command = "bastion-created"
+			cmd.Result = result
+
+			marshalledData, err = json.Marshal(cmd)
+			if err != nil {
+				log.Debugf("handleConnection: json.Marshal returns %v", err)
+				return err
+			}
+
+			err = sendByteArray(conn, marshalledData)
+			if err != nil {
+				return err
+			}
 		default:
 			log.Debugf("handleConnection: ERROR received unknown command %s", cmdHeader.Command)
 			return fmt.Errorf("handleConnection received unknown command %s", cmdHeader.Command)
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Debugf("handleConnection: scanner.Err return %v", err)
-	}
-
-	return err
+//	if err := scanner.Err(); err != nil {
+//		log.Debugf("handleConnection: scanner.Err return %v", err)
+//	}
+//	return err
 }
 
-func handleCreateMetadata(data string, shouldCreate bool) error {
+func handleCreateMetadata(data string, shouldCreate bool, errChan chan error) {
 	var (
 		cmd            CommandSendMetadata
 		marshalledData []byte
@@ -1335,7 +1380,8 @@ func handleCreateMetadata(data string, shouldCreate bool) error {
 	err = json.Unmarshal([]byte(data), &cmd)
 	if err != nil {
 		log.Debugf("handleCreateMetadata: Unmarshal() returns %v", err)
-		return err
+		errChan <- err
+		return
 	}
 	log.Debugf("handleCreateMetadata: cmd.metadata = %+v", cmd.Metadata)
 	log.Debugf("handleCreateMetadata: cmd.metadata.ClusterName = %+v", cmd.Metadata.ClusterName)
@@ -1344,7 +1390,8 @@ func handleCreateMetadata(data string, shouldCreate bool) error {
 	marshalledData, err = json.Marshal(cmd.Metadata)
 	if err != nil {
 		log.Debugf("handleCreateMetadata: json.Marshal() returns %v", err)
-		return err
+		errChan <- err
+		return
 	}
 
 	if shouldCreate {
@@ -1352,32 +1399,37 @@ func handleCreateMetadata(data string, shouldCreate bool) error {
 		err = os.MkdirAll(cmd.Metadata.InfraID, os.ModePerm)
 		if err != nil {
 			log.Debugf("handleCreateMetadata: os.MkdirAll() returns %v", err)
-			return err
+			errChan <- err
+			return
 		}
 
 		err = os.WriteFile(fmt.Sprintf("%s/metadata.json", cmd.Metadata.InfraID), marshalledData, 0644)
 		if err != nil {
 			log.Debugf("handleCreateMetadata: os.MkdirAll() returns %v", err)
-			return err
+			errChan <- err
+			return
 		}
 	} else {
 		err = os.Remove(fmt.Sprintf("%s/metadata.json", cmd.Metadata.InfraID))
 		if err != nil {
 			log.Debugf("handleCreateMetadata: os.Remove(%s/metadata.json) returns %v", cmd.Metadata.InfraID, err)
-			return err
+			errChan <- err
+			return
 		}
 
 		err = os.Remove(cmd.Metadata.InfraID)
 		if err != nil {
 			log.Debugf("handleCreateMetadata: os.Remove(%s) returns %v", cmd.Metadata.InfraID, err)
-			return err
+			errChan <- err
+			return
 		}
 	}
 
-	return err
+	errChan <- err
+	return
 }
 
-func handleCreateBastion(data string) error {
+func handleCreateBastion(data string, errChan chan error) {
 	var (
 		cmd    CommandCreateBastion
 		ctx    context.Context
@@ -1391,7 +1443,8 @@ func handleCreateBastion(data string) error {
 	err = json.Unmarshal([]byte(data), &cmd)
 	if err != nil {
 		log.Debugf("handleCreateBastion: Unmarshal() returns %v", err)
-		return err
+		errChan <- err
+		return
 	}
 	log.Debugf("handleCreateBastion: cmd.Command    = %s", cmd.Command)
 	log.Debugf("handleCreateBastion: cmd.CloudName  = %s", cmd.CloudName)
@@ -1401,5 +1454,7 @@ func handleCreateBastion(data string) error {
 	ctx, cancel = context.WithTimeout(context.TODO(), 10*time.Minute)
 	defer cancel()
 
-	return setupBastionServer(ctx, cmd.CloudName, cmd.ServerName, cmd.DomainName)
+	err = setupBastionServer(ctx, cmd.CloudName, cmd.ServerName, cmd.DomainName)
+	log.Debugf("handleCreateBastion: setupBastionServer returns %v", err)
+	errChan <- err
 }

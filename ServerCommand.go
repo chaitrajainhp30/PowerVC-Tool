@@ -15,10 +15,26 @@
 package main
 
 import (
+	"bufio"
+//	"bytes"
 	"encoding/json"
+//	"io"
 	"io/ioutil"
 	"net"
 )
+
+//	buffer := make([]byte, 1024)
+//	n, err := conn.Read(buffer)
+// or
+
+//	_, err = io.Copy(&buf, conn)
+//      buf.Len()
+//	buf.String()
+// or
+
+//	reader := bufio.NewReader(conn)
+//	data, err := reader.ReadString('\n')
+// or
 
 type CommandHeader struct {
         Command string `json:"Command"`
@@ -36,6 +52,35 @@ type CommandCreateBastion struct {
 	DomainName string        `json:"domainName"`
 }
 
+type CommandBastionCreated struct {
+	Command    string        `json:"Command"`
+	Result     error         `json:"Result"`
+}
+
+func sendByteArray(conn net.Conn, ab []byte) (err error) {
+	_, err = conn.Write(ab)
+	if err != nil {
+		log.Debugf("sendByteArray: conn.Write(ab) returns %v", err)
+		return
+	}
+
+	_, err = conn.Write([]byte("\n"))
+	if err != nil {
+		log.Debugf("sendByteArray: conn.Write(\"\\n\") returns %v", err)
+		return
+	}
+
+	return
+}
+
+func receiveResponse(conn net.Conn) (response string, err error) {
+	reader := bufio.NewReader(conn)
+
+	response, err = reader.ReadString('\n')
+
+	return
+}
+
 func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata bool) error {
 	var (
 		content        []byte
@@ -51,6 +96,9 @@ func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata boo
 		log.Debugf("sendMetadata: net.Dial return %v", err)
 		return err
 	}
+
+	// Close the connection when we're done
+	defer conn.Close()
 
 	// Read metadata.json into a buffer
 	content, err = ioutil.ReadFile(metadataFile)
@@ -80,15 +128,11 @@ func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata boo
 	}
 	log.Debugf("sendMetadata: marshalledData = %v", string(marshalledData))
 
-	// Send some data to the server
-	_, err = conn.Write(marshalledData)
+	// Send the command to the server
+	err = sendByteArray(conn, marshalledData)
 	if err != nil {
-		log.Debugf("sendMetadata: conn.Write return %v", err)
 		return err
 	}
-
-	// Close the connection
-	conn.Close()
 
 	log.Debugf("sendMetadata: Done!")
 
@@ -99,6 +143,7 @@ func sendCreateBastion(serverIP string, cloudName string, serverName string, dom
 	var (
 		cmd            CommandCreateBastion
 		marshalledData []byte
+		response       string
 		err            error
 	)
 
@@ -113,27 +158,33 @@ func sendCreateBastion(serverIP string, cloudName string, serverName string, dom
 	// Connect to the server
 	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, "8080"))
 	if err != nil {
-		log.Debugf("sendMetadata: net.Dial return %v", err)
+		log.Debugf("sendMetadata: net.Dial returns %v", err)
 		return err
 	}
 
+	// Close the connection when we're done
+	defer conn.Close()
+
 	marshalledData, err = json.Marshal(cmd)
 	if err != nil {
-		log.Debugf("sendCreateBastion: json.Marshal return %v", err)
+		log.Debugf("sendCreateBastion: json.Marshal returns %v", err)
 		return err
 	}
 	log.Debugf("sendCreateBastion: marshalledData = %v", string(marshalledData))
 
-	// Send some data to the server
-	_, err = conn.Write(marshalledData)
+	// Send the command to the server
+	err = sendByteArray(conn, marshalledData)
 	if err != nil {
-		log.Debugf("sendCreateBastion: conn.Write return %v", err)
 		return err
 	}
 
-	// Close the connection
-	conn.Close()
-
+	response, err = receiveResponse(conn)
+	if err != nil {
+		log.Debugf("sendCreateBastion: receiveResponse returns %v", err)
+		// if err != io.EOF {
+		return err
+	}
+	log.Debugf("sendCreateBastion: read: %s", response)
 	log.Debugf("sendCreateBastion: Done!")
 
 	return nil
