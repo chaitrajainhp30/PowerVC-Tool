@@ -56,6 +56,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		out            io.Writer
 		ptrCloud       *string
 		ptrBastionName *string
+		ptrBastionRsa  *string
 		ptrFlavorName  *string
 		ptrImageName   *string
 		ptrNetworkName *string
@@ -71,6 +72,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 
 	ptrCloud = createBastionFlags.String("cloud", "", "The cloud to use in clouds.yaml")
 	ptrBastionName = createBastionFlags.String("bastionName", "", "The name of the bastion VM to use")
+	ptrBastionRsa = createBastionFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
 	ptrFlavorName = createBastionFlags.String("flavorName", "", "The name of the flavor to use")
 	ptrImageName = createBastionFlags.String("imageName", "", "The name of the image to use")
 	ptrNetworkName = createBastionFlags.String("networkName", "", "The name of the network to use")
@@ -88,6 +90,9 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 	}
 	if ptrBastionName == nil || *ptrBastionName == "" {
 		return fmt.Errorf("Error: --bastionName not specified")
+	}
+	if ptrBastionRsa == nil || *ptrBastionRsa == "" {
+		return fmt.Errorf("Error: --bastionRsa not specified")
 	}
 	if ptrFlavorName == nil || *ptrFlavorName == "" {
 		return fmt.Errorf("Error: --flavorName not specified")
@@ -184,7 +189,7 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 		}
 	} else {
 		// Set it up locally
-		err = setupBastionServer(ctx, *ptrCloud, *ptrBastionName, *ptrDomainName)
+		err = setupBastionServer(ctx, *ptrCloud, *ptrBastionName, *ptrDomainName, *ptrBastionRsa)
 		if err != nil {
 			log.Debugf("setupBastionServer returns %+v", err)
 			return err
@@ -312,7 +317,7 @@ func createServer(ctx context.Context, cloudName string, flavorName string, imag
 	return err
 }
 
-func setupBastionServer(ctx context.Context, cloudName string, serverName string, domainName string) error {
+func setupBastionServer(ctx context.Context, cloudName string, serverName string, domainName string, bastionRsa string) error {
 	var (
 		server       servers.Server
 		ipAddress    string
@@ -347,7 +352,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 	}
 	log.Debugf("setupBastionServer: homeDir = %s", homeDir)
 
-	installerRsa = path.Join(homeDir, ".ssh/id_installer_rsa")
+	installerRsa = path.Join(homeDir, fmt.Sprintf(".ssh/%s", bastionRsa))
 	log.Debugf("setupBastionServer: installerRsa = %s", installerRsa)
 
 	outb, err = runSplitCommand2([]string{

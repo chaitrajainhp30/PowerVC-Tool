@@ -43,6 +43,7 @@ func createRhcosCommand(createRhcosFlags *flag.FlagSet, args []string) error {
 		apiKey          string
 		ptrCloud        *string
 		ptrRhcosName    *string
+		ptrBastionRsa   *string
 		ptrFlavorName   *string
 		ptrImageName    *string
 		ptrNetworkName  *string
@@ -62,6 +63,7 @@ func createRhcosCommand(createRhcosFlags *flag.FlagSet, args []string) error {
 
 	ptrCloud = createRhcosFlags.String("cloud", "", "The cloud to use in clouds.yaml")
 	ptrRhcosName = createRhcosFlags.String("rhcosName", "", "The name of the bastion VM to use")
+	ptrBastionRsa = createRhcosFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
 	ptrFlavorName = createRhcosFlags.String("flavorName", "", "The name of the flavor to use")
 	ptrImageName = createRhcosFlags.String("imageName", "", "The name of the image to use")
 	ptrNetworkName = createRhcosFlags.String("networkName", "", "The name of the network to use")
@@ -78,6 +80,9 @@ func createRhcosCommand(createRhcosFlags *flag.FlagSet, args []string) error {
 	}
 	if ptrRhcosName == nil || *ptrRhcosName == "" {
 		return fmt.Errorf("Error: --bastionName not specified")
+	}
+	if ptrBastionRsa == nil || *ptrBastionRsa == "" {
+		return fmt.Errorf("Error: --bastionRsa not specified")
 	}
 	if ptrFlavorName == nil || *ptrFlavorName == "" {
 		return fmt.Errorf("Error: --flavorName not specified")
@@ -155,7 +160,7 @@ func createRhcosCommand(createRhcosFlags *flag.FlagSet, args []string) error {
 		}
 	}
 
-	err = setupRhcosServer(ctx, *ptrCloud, foundServer)
+	err = setupRhcosServer(ctx, *ptrCloud, foundServer, *ptrBastionRsa)
 	if err != nil {
 		return err
 	}
@@ -172,7 +177,7 @@ func createRhcosCommand(createRhcosFlags *flag.FlagSet, args []string) error {
 	return err
 }
 
-func setupRhcosServer(ctx context.Context, cloudName string, server servers.Server) error {
+func setupRhcosServer(ctx context.Context, cloudName string, server servers.Server, bastionRsa string) error {
 	var (
 		ipAddress    string
 		homeDir      string
@@ -201,7 +206,7 @@ func setupRhcosServer(ctx context.Context, cloudName string, server servers.Serv
 	}
 	log.Debugf("setupRhcosServer: homeDir = %s", homeDir)
 
-	installerRsa = path.Join(homeDir, ".ssh/id_installer_rsa")
+	installerRsa = path.Join(homeDir, fmt.Sprintf(".ssh/%s", bastionRsa))
 	log.Debugf("setupRhcosServer: installerRsa = %s", installerRsa)
 
 	outb, err = runSplitCommand2([]string{

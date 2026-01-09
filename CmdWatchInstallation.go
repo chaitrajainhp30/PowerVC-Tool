@@ -45,6 +45,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+var (
+	bastionRsa string // @HACK
+)
+
 //	scanner := bufio.NewScanner(conn)
 //	for scanner.Scan() {
 //		data = scanner.Text()
@@ -90,7 +94,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 		ptrDomainName       *string
 		ptrBastionMetadata  *string
 		ptrBastionUsername  *string
-		ptrInstallerRsa     *string
+		ptrBastionRsa       *string
 		ptrDhcpInterface    *string
 		ptrDhcpSubnet       *string
 		ptrDhcpNetmask      *string
@@ -117,7 +121,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	ptrDomainName = watchInstallationFlags.String("domainName", "", "The DNS domain to use")
 	ptrBastionMetadata = watchInstallationFlags.String("bastionMetadata", "", "A root directory where OpenShift clusters installs are located")
 	ptrBastionUsername = watchInstallationFlags.String("bastionUsername", "", "The username of the bastion VM to use")
-	ptrInstallerRsa = watchInstallationFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
+	ptrBastionRsa = watchInstallationFlags.String("bastionRsa", "", "The RSA filename for the bastion VM to use")
 	ptrEnableDhcpd = watchInstallationFlags.String("enableDhcpd", "false", "Should enable the dhcpd server")
 	ptrDhcpInterface = watchInstallationFlags.String("dhcpInterface", "false", "The interface name for the dhcpd server")
 	ptrDhcpSubnet = watchInstallationFlags.String("dhcpSubnet", "", "The subnet for a DHCP request")
@@ -141,7 +145,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	if ptrBastionUsername == nil || *ptrBastionUsername == "" {
 		return fmt.Errorf("Error: --bastionUsername not specified")
 	}
-	if ptrInstallerRsa == nil || *ptrInstallerRsa == "" {
+	if ptrBastionRsa == nil || *ptrBastionRsa == "" {
 		return fmt.Errorf("Error: --bastionRsa not specified")
 	}
 	if ptrDhcpInterface == nil || *ptrDhcpInterface == "" {
@@ -194,6 +198,8 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 
 	fmt.Fprintf(os.Stderr, "Program version is %v, release = %v\n", version, release)
 
+	bastionRsa = *ptrBastionRsa
+
 	ctx, cancel = context.WithTimeout(context.TODO(), 5*time.Minute)
 	defer cancel()
 
@@ -203,7 +209,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	for true {
 		log.Debugf("Waking up")
 
-		bastionInformations, err = gatherBastionInformations(*ptrBastionMetadata, *ptrBastionUsername, *ptrInstallerRsa)
+		bastionInformations, err = gatherBastionInformations(*ptrBastionMetadata, *ptrBastionUsername, *ptrBastionRsa)
 		if err != nil {
 			return err
 		}
@@ -412,7 +418,9 @@ func updateBastionInformations(ctx context.Context, cloud string, bastionInforma
 
 		bastionServer, err = findServerInList(allServers, clusterName)
 		if err != nil {
-			return
+			log.Debugf("updateBastionInformations: findServerInList returns %v", err)
+			// Skip it
+			continue
 		}
 		log.Debugf("updateBastionInformations: bastionServer.Name = %s", bastionServer.Name)
 
@@ -1454,7 +1462,7 @@ func handleCreateBastion(data string, errChan chan error) {
 	ctx, cancel = context.WithTimeout(context.TODO(), 10*time.Minute)
 	defer cancel()
 
-	err = setupBastionServer(ctx, cmd.CloudName, cmd.ServerName, cmd.DomainName)
+	err = setupBastionServer(ctx, cmd.CloudName, cmd.ServerName, cmd.DomainName, bastionRsa)
 	log.Debugf("handleCreateBastion: setupBastionServer returns %v", err)
 	errChan <- err
 }
