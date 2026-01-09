@@ -322,7 +322,6 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		server       servers.Server
 		ipAddress    string
 		homeDir      string
-		installerRsa string
 		outb         []byte
 		outs         string
 		exitError    *exec.ExitError
@@ -345,15 +344,13 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 	}
 
 	log.Debugf("setupBastionServer: ipAddress = %s", ipAddress)
+	log.Debugf("setupBastionServer: bastionRsa = %s", bastionRsa)
 
 	homeDir, err = os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 	log.Debugf("setupBastionServer: homeDir = %s", homeDir)
-
-	installerRsa = path.Join(homeDir, fmt.Sprintf(".ssh/%s", bastionRsa))
-	log.Debugf("setupBastionServer: installerRsa = %s", installerRsa)
 
 	outb, err = runSplitCommand2([]string{
 		"ssh-keygen",
@@ -394,7 +391,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",
-			installerRsa,
+			bastionRsa,
 			fmt.Sprintf("cloud-user@%s", ipAddress),
 			"rpm",
 			"-q",
@@ -409,7 +406,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 				outb, err = runSplitCommand2([]string{
 					"ssh",
 					"-i",
-					installerRsa,
+					bastionRsa,
 					fmt.Sprintf("cloud-user@%s", ipAddress),
 					"sudo",
 					"dnf",
@@ -429,7 +426,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",
-			installerRsa,
+			bastionRsa,
 			fmt.Sprintf("cloud-user@%s", ipAddress),
 			"sudo",
 			"stat",
@@ -447,7 +444,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 			outb, err = runSplitCommand2([]string{
 				"ssh",
 				"-i",
-				installerRsa,
+				bastionRsa,
 				fmt.Sprintf("cloud-user@%s", ipAddress),
 				"sudo",
 				"chmod",
@@ -465,7 +462,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",
-			installerRsa,
+			bastionRsa,
 			fmt.Sprintf("cloud-user@%s", ipAddress),
 			"sudo",
 			"getsebool",
@@ -481,7 +478,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 			outb, err = runSplitCommand2([]string{
 				"ssh",
 				"-i",
-				installerRsa,
+				bastionRsa,
 				fmt.Sprintf("cloud-user@%s", ipAddress),
 				"sudo",
 				"setsebool",
@@ -499,7 +496,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",
-			installerRsa,
+			bastionRsa,
 			fmt.Sprintf("cloud-user@%s", ipAddress),
 			"sudo",
 			"systemctl",
@@ -516,7 +513,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",
-			installerRsa,
+			bastionRsa,
 			fmt.Sprintf("cloud-user@%s", ipAddress),
 			"sudo",
 			"systemctl",
