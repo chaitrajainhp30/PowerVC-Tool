@@ -14,6 +14,197 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -euo pipefail
+
+if [[ ! -v ${CLOUD} ]]
+then
+	read -p "What is the cloud name in ~/.config/openstack/clouds.yaml []: " CLOUD
+	if [ -z "${CLOUD}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export CLOUD
+fi
+
+declare -a PROGRAMS
+PROGRAMS=( PowerVC-Tool openshift-install openstack jq )
+for PROGRAM in ${PROGRAMS[@]}
+do
+	echo "Checking for program ${PROGRAM}"
+	if ! hash ${PROGRAM} 1>/dev/null 2>&1
+	then
+		echo "Error: Missing ${PROGRAM} program!"
+		exit 1
+	fi
+done
+
+openstack --os-cloud=${CLOUD} image list 1>/dev/null
+if [ $? -gt 0 ]
+then
+	echo "Error: Is openstack configured correctly?"
+	exit 1
+fi
+
+if [[ ! -v ${BASEDOMAIN} ]]
+then
+	read -p "What is the base domain []: " BASEDOMAIN
+	if [ -z "${BASEDOMAIN}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export BASEDOMAIN
+fi
+
+if [[ ! -v ${BASTION_IMAGE_NAME} ]]
+then
+	read -p "What is the image name to use for the bastion []: " BASTION_IMAGE_NAME
+	if [ -z "${BASTION_IMAGE_NAME}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export BASTION_IMAGE_NAME
+fi
+
+openstack --os-cloud=${CLOUD} image show ${BASTION_IMAGE_NAME} 1>/dev/null
+if [ $? -gt 0 ]
+then
+	echo "Error: Cannot find image (${BASTION_IMAGE_NAME}). Is openstack configured correctly?"
+	exit 1
+fi
+
+if [[ ! -v ${BASTION_USERNAME} ]]
+then
+	read -p "What is the username to use for the bastion [cloud-user]: " BASTION_USERNAME
+	if [ "${BASTION_USERNAME}" == "" ]
+	then
+		BASTION_USERNAME="cloud-user"
+	fi
+	export BASTION_USERNAME
+fi
+
+if [[ ! -v ${CLUSTER_DIR} ]]
+then
+	read -p "What directory should be used for the installation [test]: " CLUSTER_DIR
+	if [ "${CLUSTER_DIR}" == "" ]
+	then
+		CLUSTER_DIR="test"
+	fi
+	export CLUSTER_DIR
+	if [ -d "${CLUSTER_DIR}" ]
+	then
+		echo "Error: The directory ${CLUSTER_DIR} exists.  Please delete it and try again."
+		exit 1
+	fi
+fi
+
+if [[ ! -v ${CLUSTER_NAME} ]]
+then
+	read -p "What is the name of the cluster []: " CLUSTER_NAME
+	if [ -z "${CLUSTER_NAME}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export CLUSTER_NAME
+fi
+
+if [[ ! -v ${FLAVOR_NAME} ]]
+then
+	read -p "What is the OpenStack flavor []: " FLAVOR_NAME
+	if [ -z "${FLAVOR_NAME}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export FLAVOR_NAME
+fi
+
+openstack --os-cloud=${CLOUD} flavor show ${FLAVOR_NAME} 1>/dev/null
+if [ $? -gt 0 ]
+then
+	echo "Error: Cannot find flavor (${FLAVOR_NAME}). Is openstack configured correctly?"
+	exit 1
+fi
+
+if [[ ! -v ${MACHINE_TYPE} ]]
+then
+	read -p "What is the OpenStack machine type []: " MACHINE_TYPE
+	if [ -z "${MACHINE_TYPE}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export MACHINE_TYPE
+fi
+
+openstack --os-cloud=${CLOUD} availability zone list --format csv | grep '"'${MACHINE_TYPE}'"' 1>/dev/null
+if [ $? -gt 0 ]
+then
+	echo "Error: Cannot find availability zone (${MACHINE_TYPE}). Is openstack configured correctly?"
+	exit 1
+fi
+
+if [[ ! -v ${NETWORK_NAME} ]]
+then
+	read -p "What is the OpenStack network []: " NETWORK_NAME
+	if [ -z "${NETWORK_NAME}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export NETWORK_NAME
+fi
+
+openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell 1>/dev/null
+if [ $? -gt 0 ]
+then
+	echo "Error: Cannot find network (${NETWORK_NAME}). Is openstack configured correctly?"
+	exit 1
+fi
+
+SUBNET_ID=$(openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell | grep ^subnets | sed -e "s,^[^']*',," -e "s,'.*$,,")
+
+MACHINE_NETWORK=$(openstack --os-cloud=${CLOUD} subnet show "${SUBNET_ID}" --format shell | grep ^cidr)
+
+if [[ ! -v ${RHCOS_IMAGE_NAME} ]]
+then
+	read -p "What is the RHCOS image name to use for the cluster []: " RHCOS_IMAGE_NAME
+	if [ -z "${RHCOS_IMAGE_NAME}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export RHCOS_IMAGE_NAME
+fi
+
+openstack --os-cloud=${CLOUD} image show ${RHCOS_IMAGE_NAME} 1>/dev/null
+if [ $? -gt 0 ]
+then
+	echo "Error: Cannot find image (${RHCOS_IMAGE_NAME}). Is openstack configured correctly?"
+	exit 1
+fi
+
+if [[ ! -v ${SSHKEY_NAME} ]]
+then
+	read -p "What is the OpenStack keypair to use for the bastion []: " SSHKEY_NAME
+	if [ -z "${SSHKEY_NAME}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export SSHKEY_NAME
+fi
+
+openstack --os-cloud=${CLOUD} keypair show ${SSHKEY_NAME} 1>/dev/null
+if [ $? -gt 0 ]
+then
+	echo "Error: Cannot find OpenStack keypair (${SSHKEY_NAME}). Is openstack configured correctly?"
+	exit 1
+fi
+
 # NOTE: IBMCLOUD_API_KEY is an optional environment variable
 declare -a ENV_VARS
 ENV_VARS=( "BASEDOMAIN" "BASTION_IMAGE_NAME" "BASTION_USERNAME" "CLOUD" "CLUSTER_DIR" "CLUSTER_NAME" "FLAVOR_NAME" "MACHINE_TYPE" "NETWORK_NAME" "RHCOS_IMAGE_NAME" "SSHKEY_NAME" )
@@ -33,45 +224,10 @@ do
 	fi
 done
 
-set -euo pipefail
-
-declare -a PROGRAMS
-PROGRAMS=( PowerVC-Tool openshift-install openstack jq )
-for PROGRAM in ${PROGRAMS[@]}
-do
-	echo "Checking for program ${PROGRAM}"
-	if ! hash ${PROGRAM} 1>/dev/null 2>&1
-	then
-		echo "Error: Missing ${PROGRAM} program!"
-		exit 1
-	fi
-done
-
-if ! openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell > /dev/null 2>&1
-then
-	echo "Error: Is the OpenStack cloud (${CLOUD}) configured correctly?"
-	exit 1
-fi
-
-SUBNET_ID=$(openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell | grep ^subnets | sed -e "s,^[^']*',," -e "s,'.*$,,")
-if [ -z "${SUBNET_ID}" ]
-then
-	echo "Error: SUBNET_ID is empty!"
-	exit 1
-fi
-
-MACHINE_NETWORK=$(openstack --os-cloud=${CLOUD} subnet show "${SUBNET_ID}" --format shell | grep ^cidr)
-if [ -z "${MACHINE_NETWORK}" ]
-then
-	echo "Error: MACHINE_NETWORK is empty!"
-	exit 1
-fi
-
-if [ -d ${CLUSTER_DIR} ]
-then
-	/bin/rm -rf ${CLUSTER_DIR}
-fi
 mkdir ${CLUSTER_DIR}
+
+#@TODO
+exit 1
 
 INSTALLER_SSHKEY=~/.ssh/id_installer_rsa.pub
 if [ ! -f ${INSTALLER_SSHKEY} ]
@@ -123,11 +279,40 @@ then
 	exit 1
 fi
 
-if !getent ahostsv4 api.${CLUSTER_NAME}.${BASEDOMAIN} > /dev/null 2>&1
-then
-	echo "Error: Cannot resolve api.${CLUSTER_NAME}.${BASEDOMAIN}"
-	exit 1
-fi
+# Make sure all required DNS entries exist!
+while true
+do
+	FOUND_ALL=true
+	for PREFIX in api api-int console.apps
+	do
+		DNS="${PREFIX}.${CLUSTER_NAME}.${BASEDOMAIN}"
+		FOUND=false
+		for ((I=0; I < 10; I++))
+		do
+			echo "Trying ${DNS}"
+			if getent ahostsv4 ${DNS}
+			then
+				echo "Found!"
+				FOUND=true
+				break
+			fi
+			sleep 5s
+		done
+		if ! ${FOUND}
+		then
+			FOUND_ALL=false
+		fi
+	done
+	echo "FOUND_ALL=${FOUND_ALL}"
+	if ${FOUND_ALL}
+	then
+		break
+	fi
+	sleep 15s
+done
+
+# Check if the VIP is the same as the LB
+FOUND=false
 for (( TRIES=0; TRIES<=60; TRIES++ ))
 do
 	set +e
@@ -137,14 +322,14 @@ do
 	echo "VIP_API=${VIP_API}"
 	if [ "${IP}" == "${VIP_API}" ]
 	then
+		FOUND=true
 		break
 	else
 		echo "Warning: VIP_API (${VIP_API}) is not the same as IP (${IP}), sleeping..."
 	fi
 	sleep 15s
 done
-IP=$(getent ahostsv4 api.${CLUSTER_NAME}.${BASEDOMAIN} 2>/dev/null | grep STREAM | cut -f1 -d' ')
-if [ "${IP}" != "${VIP_API}" ]
+if ! ${FOUND}
 then
 	echo "Error: VIP_API (${VIP_API}) is not the same as ${IP}"
 	exit 1
