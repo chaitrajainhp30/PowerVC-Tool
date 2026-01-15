@@ -40,6 +40,8 @@ var (
 )
 
 func printUsage(executableName string) {
+	fmt.Fprintf(os.Stderr, "version = %v\nrelease = %v\n", version, release)
+
 	fmt.Fprintf(os.Stderr, "Usage: %s [ "+
 		"create-bastion "+
 		"| create-rhcos "+
