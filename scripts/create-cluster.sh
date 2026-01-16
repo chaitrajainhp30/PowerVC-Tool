@@ -15,8 +15,12 @@
 # limitations under the License.
 
 set -euo pipefail
+set -x
 
-if [[ ! -v ${CLOUD} ]]
+INSTALLER_SSHKEY=~/.ssh/id_installer_rsa.pub
+PULLSECRET_FILE=~/.pullSecretCompact
+
+if [[ ! -v CLOUD ]]
 then
 	read -p "What is the cloud name in ~/.config/openstack/clouds.yaml []: " CLOUD
 	if [ -z "${CLOUD}" ]
@@ -46,7 +50,7 @@ then
 	exit 1
 fi
 
-if [[ ! -v ${BASEDOMAIN} ]]
+if [[ ! -v BASEDOMAIN ]]
 then
 	read -p "What is the base domain []: " BASEDOMAIN
 	if [ -z "${BASEDOMAIN}" ]
@@ -57,7 +61,7 @@ then
 	export BASEDOMAIN
 fi
 
-if [[ ! -v ${BASTION_IMAGE_NAME} ]]
+if [[ ! -v BASTION_IMAGE_NAME ]]
 then
 	read -p "What is the image name to use for the bastion []: " BASTION_IMAGE_NAME
 	if [ -z "${BASTION_IMAGE_NAME}" ]
@@ -75,7 +79,7 @@ then
 	exit 1
 fi
 
-if [[ ! -v ${BASTION_USERNAME} ]]
+if [[ ! -v BASTION_USERNAME ]]
 then
 	read -p "What is the username to use for the bastion [cloud-user]: " BASTION_USERNAME
 	if [ "${BASTION_USERNAME}" == "" ]
@@ -85,7 +89,7 @@ then
 	export BASTION_USERNAME
 fi
 
-if [[ ! -v ${CLUSTER_DIR} ]]
+if [[ ! -v CLUSTER_DIR ]]
 then
 	read -p "What directory should be used for the installation [test]: " CLUSTER_DIR
 	if [ "${CLUSTER_DIR}" == "" ]
@@ -100,7 +104,7 @@ then
 	fi
 fi
 
-if [[ ! -v ${CLUSTER_NAME} ]]
+if [[ ! -v CLUSTER_NAME ]]
 then
 	read -p "What is the name of the cluster []: " CLUSTER_NAME
 	if [ -z "${CLUSTER_NAME}" ]
@@ -111,7 +115,7 @@ then
 	export CLUSTER_NAME
 fi
 
-if [[ ! -v ${FLAVOR_NAME} ]]
+if [[ ! -v FLAVOR_NAME ]]
 then
 	read -p "What is the OpenStack flavor []: " FLAVOR_NAME
 	if [ -z "${FLAVOR_NAME}" ]
@@ -129,7 +133,7 @@ then
 	exit 1
 fi
 
-if [[ ! -v ${MACHINE_TYPE} ]]
+if [[ ! -v MACHINE_TYPE ]]
 then
 	read -p "What is the OpenStack machine type []: " MACHINE_TYPE
 	if [ -z "${MACHINE_TYPE}" ]
@@ -147,7 +151,7 @@ then
 	exit 1
 fi
 
-if [[ ! -v ${NETWORK_NAME} ]]
+if [[ ! -v NETWORK_NAME ]]
 then
 	read -p "What is the OpenStack network []: " NETWORK_NAME
 	if [ -z "${NETWORK_NAME}" ]
@@ -168,8 +172,9 @@ fi
 SUBNET_ID=$(openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell | grep ^subnets | sed -e "s,^[^']*',," -e "s,'.*$,,")
 
 MACHINE_NETWORK=$(openstack --os-cloud=${CLOUD} subnet show "${SUBNET_ID}" --format shell | grep ^cidr)
+MACHINE_NETWORK=$(echo "${MACHINE_NETWORK}" | sed -re 's,^[^"]*"(.*)",\1,')
 
-if [[ ! -v ${RHCOS_IMAGE_NAME} ]]
+if [[ ! -v RHCOS_IMAGE_NAME ]]
 then
 	read -p "What is the RHCOS image name to use for the cluster []: " RHCOS_IMAGE_NAME
 	if [ -z "${RHCOS_IMAGE_NAME}" ]
@@ -187,7 +192,7 @@ then
 	exit 1
 fi
 
-if [[ ! -v ${SSHKEY_NAME} ]]
+if [[ ! -v SSHKEY_NAME ]]
 then
 	read -p "What is the OpenStack keypair to use for the bastion []: " SSHKEY_NAME
 	if [ -z "${SSHKEY_NAME}" ]
@@ -226,10 +231,6 @@ done
 
 mkdir ${CLUSTER_DIR}
 
-#@TODO
-exit 1
-
-INSTALLER_SSHKEY=~/.ssh/id_installer_rsa.pub
 if [ ! -f ${INSTALLER_SSHKEY} ]
 then
 	echo "Error: ${INSTALLER_SSHKEY} does not exist!"
@@ -237,7 +238,6 @@ then
 fi
 SSH_KEY=$(cat ${INSTALLER_SSHKEY})
 
-PULLSECRET_FILE=~/.pullSecretCompact
 if [ ! -f ${PULLSECRET_FILE} ]
 then
 	echo "Error: ${PULLSECRET_FILE} does not exist!"
@@ -392,6 +392,11 @@ pullSecret: '${PULL_SECRET}'
 sshKey: |
   ${SSH_KEY}
 ___EOF___
+
+# @DEBUG
+echo "8<-----8<-----8<-----8<-----8<-----8<-----8<-----8<-----8<-----8<-----"
+cat ${CLUSTER_DIR}/install-config.yaml
+echo "8<-----8<-----8<-----8<-----8<-----8<-----8<-----8<-----8<-----8<-----"
 
 openshift-install version
 RC=$?
