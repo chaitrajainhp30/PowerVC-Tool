@@ -170,10 +170,42 @@ then
 fi
 
 SUBNET_ID=$(openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell | grep ^subnets | sed -e "s,^[^']*',," -e "s,'.*$,,")
+if [ -z "${SUBNET_ID}" ]
+then
+	echo "Error: SUBNET_ID returned from OpenStack is empty?"
+	exit 1
+fi
 
 MACHINE_NETWORK=$(openstack --os-cloud=${CLOUD} subnet show "${SUBNET_ID}" --format shell | grep ^cidr)
+if [ -z "${MACHINE_NETWORK}" ]
+then
+	echo "Error: MACHINE_NETWORK returned from OpenStack is empty?"
+	exit 1
+fi
 MACHINE_NETWORK=$(echo "${MACHINE_NETWORK}" | sed -re 's,^[^"]*"(.*)",\1,')
+if [ -z "${MACHINE_NETWORK}" ]
+then
+	echo "Error: MACHINE_NETWORK returned from sed is empty?"
+	exit 1
+fi
 
+RHCOS_URL=$(openshift-install coreos print-stream-json | jq -r '.architectures.ppc64le.artifacts.openstack' | jq -r '.formats."qcow2.gz".disk.location')
+if [ -z "${RHCOS_URL}" ]
+then
+	echo "Error: RHCOS_URL is empty?"
+	exit 1
+fi
+RHCOS_FILENAME="${RHCOS_URL##*/}"
+RHCOS_FILENAME=${RHCOS_FILENAME//.qcow2.gz/}
+if [ -z "${RHCOS_FILENAME}" ]
+then
+	echo "Error: RHCOS_FILENAME is empty?"
+	exit 1
+fi
+
+# Should be discoverable!
+if true # @BUG
+then
 if [[ ! -v RHCOS_IMAGE_NAME ]]
 then
 	read -p "What is the RHCOS image name to use for the cluster []: " RHCOS_IMAGE_NAME
@@ -184,12 +216,16 @@ then
 	fi
 	export RHCOS_IMAGE_NAME
 fi
+else
+	export RHCOS_IMAGE_NAME=${RHCOS_FILENAME}
+fi
 
 openstack --os-cloud=${CLOUD} image show ${RHCOS_IMAGE_NAME} 1>/dev/null
 if [ $? -gt 0 ]
 then
 	echo "Error: Cannot find image (${RHCOS_IMAGE_NAME}). Is openstack configured correctly?"
-	exit 1
+	export RHCOS_IMAGE_NAME=${RHCOS_FILENAME}
+	#exit 1 @BUG
 fi
 
 if [[ ! -v SSHKEY_NAME ]]
@@ -260,7 +296,7 @@ RC=$?
 
 if [ ${RC} -gt 0 ]
 then
-	echo "Error: PowerVC-Create-Cluster failed with an RC of ${RC}"
+	echo "Error: PowerVC-Tool create-bastion failed with an RC of ${RC}"
 	exit 1
 fi
 
@@ -422,6 +458,19 @@ fi
 # By now, the infraID field in metadata.json is filled out
 INFRA_ID=$(jq -r .infraID ${CLUSTER_DIR}/metadata.json)
 echo "INFRA_ID=${INFRA_ID}"
+
+PowerVC-Tool \
+	send-metadata \
+	--metadata ${CLUSTER_DIR}/metadata.json \
+	--serverIP 10.130.41.245 \
+	--serverPort 8080
+RC=$?
+
+if [ ${RC} -gt 0 ]
+then
+	echo "Error: PowerVC-Tool send-metadata failed with an RC of ${RC}"
+	exit 1
+fi
 
 #jq --arg NEW_INFRA_ID ${CLUSTER_NAME} -r -c '. | .infraID = $NEW_INFRA_ID' ${CLUSTER_DIR}/metadata.json
 #jq --arg NEW_INFRA_ID ${CLUSTER_NAME} -r -c '. | .powervc.identifier.openshiftClusterID = $NEW_INFRA_ID' ${CLUSTER_DIR}/metadata.json
