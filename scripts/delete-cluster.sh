@@ -46,7 +46,7 @@ fi
 
 if [ ! -d "${CLUSTER_DIR}" ]
 then
-	echo "Error" Directory ${CLUSTER_DIR} does not exist!"
+	echo "Error: Directory ${CLUSTER_DIR} does not exist!"
 	exit 1
 fi
 
@@ -68,14 +68,6 @@ then
 	exit 1
 fi
 
-openshift-install destroy cluster --dir=${CLUSTER_DIR} --log-level=debug
-RC=$?
-if [ ${RC} -gt 0 ]
-then
-	echo "Error: openshift-install destroy cluster failed with an RC of ${RC}"
-	exit 1
-fi
-
 PowerVC-Tool \
 	send-metadata \
 	--deleteMetadata ${CLUSTER_DIR}/metadata.json \
@@ -86,5 +78,13 @@ RC=$?
 if [ ${RC} -gt 0 ]
 then
 	echo "Error: PowerVC-Tool send-metadata failed with an RC of ${RC}"
+	exit 1
+fi
+
+openshift-install destroy cluster --dir=${CLUSTER_DIR} --log-level=debug
+RC=$?
+if [ ${RC} -gt 0 ]
+then
+	echo "Error: openshift-install destroy cluster failed with an RC of ${RC}"
 	exit 1
 fi
