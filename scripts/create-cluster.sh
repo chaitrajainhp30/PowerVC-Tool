@@ -203,6 +203,24 @@ then
 	exit 1
 fi
 
+if [[ ! -v SERVER_IP ]]
+then
+	read -p "What is the PowerVC server IP []: " SERVER_IP
+	if [ -z "${SERVER_IP}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export SERVER_IP
+fi
+
+ping -c1 ${SERVER_IP}
+if [ ${RC} -gt 0 ]
+then
+	echo "Error: Trying to ping ${SERVER_IP} returned an RC of ${RC}"
+	exit 1
+fi
+
 # Should be discoverable!
 if true # @BUG
 then
@@ -248,7 +266,7 @@ fi
 
 # NOTE: IBMCLOUD_API_KEY is an optional environment variable
 declare -a ENV_VARS
-ENV_VARS=( "BASEDOMAIN" "BASTION_IMAGE_NAME" "BASTION_USERNAME" "CLOUD" "CLUSTER_DIR" "CLUSTER_NAME" "FLAVOR_NAME" "MACHINE_TYPE" "NETWORK_NAME" "RHCOS_IMAGE_NAME" "SSHKEY_NAME" )
+ENV_VARS=( "BASEDOMAIN" "BASTION_IMAGE_NAME" "BASTION_USERNAME" "CLOUD" "CLUSTER_DIR" "CLUSTER_NAME" "FLAVOR_NAME" "MACHINE_TYPE" "NETWORK_NAME" "RHCOS_IMAGE_NAME" "SERVER_IP" "SSHKEY_NAME" )
 
 for VAR in ${ENV_VARS[@]}
 do
@@ -459,11 +477,17 @@ fi
 INFRA_ID=$(jq -r .infraID ${CLUSTER_DIR}/metadata.json)
 echo "INFRA_ID=${INFRA_ID}"
 
+if [ ! -f "${CLUSTER_DIR}/metadata.json" ]
+then
+	echo "Error: Expecting ${CLUSTER_DIR}/metadata.json to exist!"
+	exit 1
+fi
+
 PowerVC-Tool \
 	send-metadata \
-	--metadata ${CLUSTER_DIR}/metadata.json \
-	--serverIP 10.130.41.245 \
-	--serverPort 8080
+	--createMetadata ${CLUSTER_DIR}/metadata.json \
+	--serverIP ${SERVER_IP} \
+	--shouldDebug true
 RC=$?
 
 if [ ${RC} -gt 0 ]
