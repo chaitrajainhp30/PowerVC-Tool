@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -euo pipefail
+# set -euo pipefail
 set -x
 
 INSTALLER_SSHKEY=~/.ssh/id_installer_rsa.pub
