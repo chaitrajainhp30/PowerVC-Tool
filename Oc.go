@@ -112,7 +112,7 @@ func (oc *Oc) ClusterStatus() {
 				"sed -e /\\(Running\\|Completed\\)/d",
 			},
 			{
-				"oc get csr",
+				"oc --request-timeout=5s get csr",
 				"grep Pending",
 			},
 		}
