@@ -317,34 +317,14 @@ func createServer(ctx context.Context, cloudName string, flavorName string, imag
 	return err
 }
 
-func setupBastionServer(ctx context.Context, cloudName string, serverName string, domainName string, bastionRsa string) error {
+func addServerKnownHosts(ctx context.Context, ipAddress string) error {
 	var (
-		server       servers.Server
-		ipAddress    string
 		homeDir      string
 		outb         []byte
 		outs         string
 		exitError    *exec.ExitError
-		apiKey       string
 		err          error
 	)
-
-	server, err = findServer(ctx, cloudName, serverName)
-	log.Debugf("setupBastionServer: server = %+v", server)
-	if err != nil {
-		return err
-	}
-
-	_, ipAddress, err = findIpAddress(server)
-	if err != nil {
-		return err
-	}
-	if ipAddress == "" {
-		return fmt.Errorf("ip address is empty for server %s", server.Name)
-	}
-
-	log.Debugf("setupBastionServer: ipAddress = %s", ipAddress)
-	log.Debugf("setupBastionServer: bastionRsa = %s", bastionRsa)
 
 	homeDir, err = os.UserHomeDir()
 	if err != nil {
@@ -352,6 +332,7 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 	}
 	log.Debugf("setupBastionServer: homeDir = %s", homeDir)
 
+	// Does ipAddress already exist in the known hosts file?
 	outb, err = runSplitCommand2([]string{
 		"ssh-keygen",
 		"-H",
@@ -385,9 +366,65 @@ func setupBastionServer(ctx context.Context, cloudName string, serverName string
 		}
 	}
 
+	return err
+}
+
+func setupBastionServer(ctx context.Context, cloudName string, serverName string, domainName string, bastionRsa string) error {
+	var (
+		server       servers.Server
+		ipAddress    string
+		outb         []byte
+		outs         string
+		exitError    *exec.ExitError
+		apiKey       string
+		err          error
+	)
+
+	server, err = findServer(ctx, cloudName, serverName)
+	log.Debugf("setupBastionServer: server = %+v", server)
+	if err != nil {
+		return err
+	}
+
+	_, ipAddress, err = findIpAddress(server)
+	if err != nil {
+		return err
+	}
+	if ipAddress == "" {
+		return fmt.Errorf("ip address is empty for server %s", server.Name)
+	}
+
+	log.Debugf("setupBastionServer: ipAddress = %s", ipAddress)
+	log.Debugf("setupBastionServer: bastionRsa = %s", bastionRsa)
+
 	fmt.Printf("Setting up server %s...\n", server.Name)
 
 	if enableHAProxy {
+		err = addServerKnownHosts(ctx, ipAddress)
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < 10; i++ {
+			outb, err = runSplitCommand2([]string{
+				"ssh",
+				"-i",
+				bastionRsa,
+				fmt.Sprintf("cloud-user@%s", ipAddress),
+				"echo",
+				"ready",
+			})
+			outs = strings.TrimSpace(string(outb))
+			log.Debugf("setupBastionServer: outs = \"%s\"", outs)
+			if outs == "ready" {
+				break
+			}
+			time.Sleep(15 * time.Second)
+		}
+		if outs != "ready" {
+			return fmt.Errorf("Error: HAProxy not ready in time")
+		}
+
 		outb, err = runSplitCommand2([]string{
 			"ssh",
 			"-i",

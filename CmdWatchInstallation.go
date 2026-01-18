@@ -431,6 +431,13 @@ func updateBastionInformations(ctx context.Context, cloud string, bastionInforma
 			continue
 		}
 
+		err = addServerKnownHosts(ctx, bastionIpAddress)
+		if err != nil {
+			log.Debugf("updateBastionInformations: addServerKnownHosts returns %v", err)
+			// Skip it
+			continue
+		}
+
 		currentVMs := 0
 		previousVMs := bastionInformation.NumVMs
 		for _, server := range allServers {
