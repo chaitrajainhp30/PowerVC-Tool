@@ -215,6 +215,7 @@ then
 fi
 
 ping -c1 ${SERVER_IP}
+RC=$?
 if [ ${RC} -gt 0 ]
 then
 	echo "Error: Trying to ping ${SERVER_IP} returned an RC of ${RC}"
@@ -510,5 +511,75 @@ openshift-install create cluster --dir=${CLUSTER_DIR} --log-level=debug
 RC=$?
 if [ ${RC} -gt 0 ]
 then
+	echo "Error: openshift-install create cluster failed with an RC of ${RC}"
+	echo
+
+	if [[ ! -v BASTION_USERNAME ]]
+	then
+		read -p "What is the username for the bastion [cloud-user]: " BASTION_USERNAME
+		if [ "${BASTION_USERNAME}" == "" ]
+		then
+			BASTION_USERNAME="cloud-user"
+		fi
+	fi
+
+	if [[ ! -v BASTION_RSA ]]
+	then
+		read -p "Where is the ssh private key for the bastion []: " BASTION_RSA
+		if [ -z "${BASTION_RSA}" ]
+		then
+			echo "Error: You must enter something"
+			exit 1
+		fi
+		if [ ! -f "${BASTION_RSA}" ]
+		then
+			echo "Error: ${BASTION_RSA} is not a file?"
+			exit 1
+		fi
+	fi
+
+	if ibmcloud target 2>&1 | grep "Not logged in"
+	then
+		# Skip the next if test
+		IBMCLOUD_API_KEY=""
+	fi
+
+	CIS_INSTANCE_CRN=""
+	if [ -n "${IBMCLOUD_API_KEY}" ]
+	then
+		while read CRN
+		do
+			ibmcloud cis instance-set "${CRN}" >/dev/null
+			while read ID NAME STATUS;
+			do
+				if [ "${STATUS}" == "pending" ]
+				then
+					continue
+				fi
+				if [ "${NAME}" == "${BASEDOMAIN}" ]
+				then
+					CIS_INSTANCE_CRN=${CRN}
+					break
+				fi
+			done < <(ibmcloud cis domains --output json | jq -r '.[] | "\(.id) \(.name) \(.status)"')
+		done < <(ibmcloud cis instances --output json | jq -r '.[].crn')
+	fi
+	echo "CIS_INSTANCE_CRN=${CIS_INSTANCE_CRN}"
+
+	ARGS="watch-create \
+		--cloud ${CLOUD} \
+		--metadata ${CLUSTER_DIR}/metadata.json \
+		--kubeconfig ${CLUSTER_DIR}/auth/kubeconfig \
+		--bastionUsername ${BASTION_USERNAME} \
+		--bastionRsa ${BASTION_RSA} \
+		--baseDomain ${BASEDOMAIN} \
+		--shouldDebug false"
+	if [ -n "${CIS_INSTANCE_CRN}" ]
+	then
+		ARGS+=" --cisInstanceCRN ${CIS_INSTANCE_CRN}"
+	fi
+
+	PowerVC-Tool ${ARGS}
+
 	exit 1
 fi
