@@ -45,10 +45,14 @@ func watchCreateClusterCommand(watchCreateClusterFlags *flag.FlagSet, args []str
 		err                error
 	)
 
+	// ibmcloud is optional
 	apiKey = os.Getenv("IBMCLOUD_API_KEY")
-	if len(apiKey) == 0 {
-		fmt.Println("Error: Environment variable IBMCLOUD_API_KEY does not exist")
-		os.Exit(1)
+	if len(apiKey) != 0 {
+		// Before we do a lot of work, validate the apikey!
+		_, err = InitBXService(apiKey)
+		if err != nil {
+			return err
+		}
 	}
 
 	ptrCloud = watchCreateClusterFlags.String("cloud", "", "The cloud to use in clouds.yaml")
@@ -111,12 +115,6 @@ func watchCreateClusterCommand(watchCreateClusterFlags *flag.FlagSet, args []str
 	}
 
 	fmt.Fprintf(os.Stderr, "Program version is %v, release = %v\n", version, release)
-
-	// Before we do a lot of work, validate the apikey!
-	_, err = InitBXService(apiKey)
-	if err != nil {
-		return err
-	}
 
 	metadata, err = NewMetadataFromCCMetadata(*ptrMetadata)
 	if err != nil {

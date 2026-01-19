@@ -99,15 +99,17 @@ func NewServices(metadata *Metadata, apiKey string, kubeConfig string, cloud str
 	}
 	log.Debugf("NewServices: controllerSvc = %+v", controllerSvc)
 
-	bxSession, err = InitBXService(apiKey)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("NewServices: bxSession = %+v", bxSession)
+	if apiKey != "" {
+		bxSession, err = InitBXService(apiKey)
+		if err != nil {
+			return nil, err
+		}
+		log.Debugf("NewServices: bxSession = %+v", bxSession)
 
-	user, err = fetchUserDetails(bxSession, 2)
-	if err != nil {
-		return nil, err
+		user, err = fetchUserDetails(bxSession, 2)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	services = &Services{
@@ -264,6 +266,10 @@ func initCloudObjectStorageService(apiKey string) (*resourcecontrollerv2.Resourc
 		controllerSvc *resourcecontrollerv2.ResourceControllerV2
 		err           error
 	)
+
+	if apiKey == "" {
+		return nil, nil
+	}
 
 	controllerSvc, err = resourcecontrollerv2.NewResourceControllerV2(&resourcecontrollerv2.ResourceControllerV2Options{
 		Authenticator: authenticator,
