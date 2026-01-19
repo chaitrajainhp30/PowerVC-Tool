@@ -91,14 +91,11 @@ func createBastionCommand(createBastionFlags *flag.FlagSet, args []string) error
 	if ptrBastionName == nil || *ptrBastionName == "" {
 		return fmt.Errorf("Error: --bastionName not specified")
 	}
-	if ptrServerIP == nil || *ptrServerIP == "" {
-		// The bastion RSA file is only needed for local installs
-		if ptrBastionRsa == nil || *ptrBastionRsa == "" {
-			return fmt.Errorf("Error: --bastionRsa not specified")
-		}
+	if (ptrBastionRsa == nil || *ptrBastionRsa == "") && (ptrServerIP == nil || *ptrServerIP == "") {
+		return fmt.Errorf("Error: Either --bastionRsa or --serverIP should be specified")
 	}
-	if (ptrBastionName == nil || *ptrBastionName == "") && (ptrServerIP == nil || *ptrServerIP == "") {
-		return fmt.Errorf("Error: Either --bastionName or --serverIP should be specified")
+	if *ptrBastionRsa != "" && *ptrServerIP != "" {
+		return fmt.Errorf("Error: Both --bastionRsa and --serverIP cannot be specified")
 	}
 	if ptrFlavorName == nil || *ptrFlavorName == "" {
 		return fmt.Errorf("Error: --flavorName not specified")
