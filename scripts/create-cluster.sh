@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -euo pipefail
-set -x
+set -uo pipefail
 
 INSTALLER_SSHKEY=~/.ssh/id_installer_rsa.pub
 PULLSECRET_FILE=~/.pullSecretCompact
@@ -490,7 +489,6 @@ PowerVC-Tool \
 	--serverIP ${SERVER_IP} \
 	--shouldDebug true
 RC=$?
-
 if [ ${RC} -gt 0 ]
 then
 	echo "Error: PowerVC-Tool send-metadata failed with an RC of ${RC}"
