@@ -322,6 +322,7 @@ PowerVC-Tool \
 	--sshKeyName "${SSHKEY_NAME}" \
 	--domainName "${BASEDOMAIN}" \
 	--enableHAProxy true \
+	--serverIP "${SERVER_IP}" \
 	--shouldDebug true
 RC=$?
 if [ ${RC} -gt 0 ]
