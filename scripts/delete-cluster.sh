@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -euo pipefail
-set -x
+set -uo pipefail
 
 declare -a PROGRAMS
 PROGRAMS=( PowerVC-Tool openshift-install )
@@ -62,6 +61,7 @@ then
 fi
 
 ping -c1 ${SERVER_IP}
+RC=$?
 if [ ${RC} -gt 0 ]
 then
 	echo "Error: Trying to ping ${SERVER_IP} returned an RC of ${RC}"
