@@ -204,7 +204,7 @@ func watchInstallationCommand(watchInstallationFlags *flag.FlagSet, args []strin
 	defer cancel()
 
 	// Spawn off the metadata listeners
-	go listenForCommands()
+	go listenForCommands(*ptrCloud)
 
 	for true {
 		log.Debugf("Waking up")
@@ -1285,7 +1285,9 @@ func createOrDeletePublicDNSRecord(ctx context.Context, dnsRecordType string, ho
 	return nil
 }
 
-func listenForCommands() error {
+func listenForCommands(cloud string) error {
+	log.Debugf("listenForCommands")
+
 	// Listen for incoming connections on port 8080
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
@@ -1300,11 +1302,11 @@ func listenForCommands() error {
 		}
 
 		// Handle the connection in a new goroutine
-		go handleConnection(conn)
+		go handleConnection(conn, cloud)
 	}
 }
 
-func handleConnection(conn net.Conn) error {
+func handleConnection(conn net.Conn, cloud string) error {
 	var (
 		data      string
 		cmdHeader CommandHeader
@@ -1351,7 +1353,7 @@ func handleConnection(conn net.Conn) error {
 				marshalledData []byte
 			)
 
-			go handleCreateBastion(data, errChan)
+			go handleCreateBastion(data, cloud, errChan)
 			result = <-errChan
 			log.Debugf("handleConnection: result from handleCreateBastion is %v", result)
 
@@ -1444,7 +1446,7 @@ func handleCreateMetadata(data string, shouldCreate bool, errChan chan error) {
 	return
 }
 
-func handleCreateBastion(data string, errChan chan error) {
+func handleCreateBastion(data string, cloud string, errChan chan error) {
 	var (
 		cmd    CommandCreateBastion
 		ctx    context.Context
@@ -1469,7 +1471,7 @@ func handleCreateBastion(data string, errChan chan error) {
 	ctx, cancel = context.WithTimeout(context.TODO(), 10*time.Minute)
 	defer cancel()
 
-	err = setupBastionServer(ctx, cmd.CloudName, cmd.ServerName, cmd.DomainName, bastionRsa)
+	err = setupBastionServer(ctx, cloud, cmd.ServerName, cmd.DomainName, bastionRsa)
 	log.Debugf("handleCreateBastion: setupBastionServer returns %v", err)
 	errChan <- err
 }

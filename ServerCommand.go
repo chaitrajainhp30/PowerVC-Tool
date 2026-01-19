@@ -154,6 +154,8 @@ func sendCreateBastion(serverIP string, cloudName string, serverName string, dom
 		DomainName: domainName,
 	}
 
+	log.Debugf("sendCreateBastion: serverIP = %s", serverIP)
+
 	// Avoid: address format "%s:%s" does not work with IPv6
 	// Connect to the server
 	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, "8080"))
