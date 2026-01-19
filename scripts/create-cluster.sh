@@ -16,9 +16,6 @@
 
 set -uo pipefail
 
-INSTALLER_SSHKEY=~/.ssh/id_installer_rsa.pub
-PULLSECRET_FILE=~/.pullSecretCompact
-
 if [[ ! -v CLOUD ]]
 then
 	read -p "What is the cloud name in ~/.config/openstack/clouds.yaml []: " CLOUD
@@ -161,6 +158,36 @@ then
 	export NETWORK_NAME
 fi
 
+if [[ -v PULLSECRET_FILE ]] && [[ -f "${PULLSECRET_FILE}" ]]
+then
+	PULL_SECRET=$(cat "${PULLSECRET_FILE}")
+	export PULL_SECRET
+else
+	read -p "What is your pull secret []: " PULL_SECRET
+	if [ -z "${PULL_SECRET}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	export PULL_SECRET
+fi
+
+if [[ ! -v INSTALLER_SSHKEY ]]
+then
+	read -p "What ssh key is used by the installer []: " INSTALLER_SSHKEY
+	if [ -z "${INSTALLER_SSHKEY}" ]
+	then
+		echo "Error: You must enter something"
+		exit 1
+	fi
+	if [ ! -f "${INSTALLER_SSHKEY}" ]
+	then
+		echo "Error: File ${INSTALLER_SSHKEY} must exist!"
+		exit 1
+	fi
+fi
+SSH_KEY=$(cat ${INSTALLER_SSHKEY})
+
 openstack --os-cloud=${CLOUD} network show "${NETWORK_NAME}" --format shell 1>/dev/null
 if [ $? -gt 0 ]
 then
@@ -285,20 +312,6 @@ done
 
 mkdir ${CLUSTER_DIR}
 
-if [ ! -f ${INSTALLER_SSHKEY} ]
-then
-	echo "Error: ${INSTALLER_SSHKEY} does not exist!"
-	exit 1
-fi
-SSH_KEY=$(cat ${INSTALLER_SSHKEY})
-
-if [ ! -f ${PULLSECRET_FILE} ]
-then
-	echo "Error: ${PULLSECRET_FILE} does not exist!"
-	exit 1
-fi
-PULL_SECRET=$(cat ~/.pullSecretCompact)
-
 PowerVC-Tool \
 	create-bastion \
 	--cloud "${CLOUD}" \
@@ -311,7 +324,6 @@ PowerVC-Tool \
 	--enableHAProxy true \
 	--shouldDebug true
 RC=$?
-
 if [ ${RC} -gt 0 ]
 then
 	echo "Error: PowerVC-Tool create-bastion failed with an RC of ${RC}"
