@@ -420,6 +420,7 @@ func updateBastionInformations(ctx context.Context, cloud string, bastionInforma
 		if err != nil {
 			log.Debugf("updateBastionInformations: findServerInList returns %v", err)
 			// Skip it
+			err = nil
 			continue
 		}
 		log.Debugf("updateBastionInformations: bastionServer.Name = %s", bastionServer.Name)
