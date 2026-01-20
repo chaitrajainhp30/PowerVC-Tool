@@ -1338,6 +1338,30 @@ func handleConnection(conn net.Conn, cloud string) error {
 		errChan = make(chan error)
 
 		switch cmdHeader.Command {
+		case "check-alive":
+			var (
+				cmd            CommandIsAlive
+				marshalledData []byte
+			)
+
+			go handleCheckAlive(data, errChan)
+			result = <-errChan
+			log.Debugf("handleConnection: result from handleCheckAlive is %v", result)
+
+			cmd.Command = "is-alive"
+			cmd.Result = result
+
+			marshalledData, err = json.Marshal(cmd)
+			if err != nil {
+				log.Debugf("handleConnection: json.Marshal returns %v", err)
+				return err
+			}
+
+			err = sendByteArray(conn, marshalledData)
+			if err != nil {
+				return err
+			}
+
 		case "create-metadata":
 			go handleCreateMetadata(data, true, errChan)
 			result = <-errChan
@@ -1382,6 +1406,26 @@ func handleConnection(conn net.Conn, cloud string) error {
 //		log.Debugf("handleConnection: scanner.Err return %v", err)
 //	}
 //	return err
+}
+
+func handleCheckAlive(data string, errChan chan error) {
+	var (
+		cmd            CommandCheckAlive
+		err            error
+	)
+
+	// Print the incoming data
+	log.Debugf("handleCheckAlive: Received: %s", data)
+
+	err = json.Unmarshal([]byte(data), &cmd)
+	if err != nil {
+		log.Debugf("handleCheckAlive: Unmarshal() returns %v", err)
+		errChan <- err
+		return
+	}
+
+	errChan <- err
+	return
 }
 
 func handleCreateMetadata(data string, shouldCreate bool, errChan chan error) {

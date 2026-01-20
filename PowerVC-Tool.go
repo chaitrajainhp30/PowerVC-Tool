@@ -43,7 +43,8 @@ func printUsage(executableName string) {
 	fmt.Fprintf(os.Stderr, "version = %v\nrelease = %v\n", version, release)
 
 	fmt.Fprintf(os.Stderr, "Usage: %s [ "+
-		"create-bastion "+
+		"check-alive "+
+		"| create-bastion "+
 		"| create-rhcos "+
 		"| create-cluster "+
 		"| send-metadata "+
@@ -55,6 +56,7 @@ func printUsage(executableName string) {
 func main() {
 	var (
 		executableName          string
+		checkAliveFlags         *flag.FlagSet
 		createBastionFlags      *flag.FlagSet
 		createClusterFlags      *flag.FlagSet
 		createRhcosFlags        *flag.FlagSet
@@ -80,6 +82,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	checkAliveFlags = flag.NewFlagSet("check-alive", flag.ExitOnError)
 	createBastionFlags = flag.NewFlagSet("create-bastion", flag.ExitOnError)
 	createClusterFlags = flag.NewFlagSet("create-cluster", flag.ExitOnError)
 	createRhcosFlags = flag.NewFlagSet("create-rhcos", flag.ExitOnError)
@@ -88,6 +91,9 @@ func main() {
 	watchCreateClusterFlags = flag.NewFlagSet("watch-create", flag.ExitOnError)
 
 	switch strings.ToLower(os.Args[1]) {
+	case "check-alive":
+		err = checkAliveCommand(checkAliveFlags, os.Args[2:])
+
 	case "create-bastion":
 		err = createBastionCommand(createBastionFlags, os.Args[2:])
 

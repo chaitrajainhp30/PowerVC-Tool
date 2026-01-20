@@ -40,9 +40,13 @@ type CommandHeader struct {
         Command string `json:"Command"`
 }
 
-type CommandSendMetadata struct {
+type CommandCheckAlive struct {
 	Command  string          `json:"Command"`
-	Metadata CreateMetadata
+}
+
+type CommandIsAlive struct {
+	Command  string          `json:"Command"`
+	Result   error           `json:"Result"`
 }
 
 type CommandCreateBastion struct {
@@ -55,6 +59,11 @@ type CommandCreateBastion struct {
 type CommandBastionCreated struct {
 	Command    string        `json:"Command"`
 	Result     error         `json:"Result"`
+}
+
+type CommandSendMetadata struct {
+	Command  string          `json:"Command"`
+	Metadata CreateMetadata
 }
 
 func sendByteArray(conn net.Conn, ab []byte) (err error) {
@@ -79,6 +88,109 @@ func receiveResponse(conn net.Conn) (response string, err error) {
 	response, err = reader.ReadString('\n')
 
 	return
+}
+
+func sendCheckAlive(serverIP string) error {
+	var (
+		cmd            CommandCheckAlive
+		marshalledData []byte
+		response       string
+		err            error
+	)
+
+	cmd = CommandCheckAlive{
+		Command: "check-alive",
+	}
+
+	log.Debugf("sendCheckAlive: serverIP = %s", serverIP)
+
+	// Avoid: address format "%s:%s" does not work with IPv6
+	// Connect to the server
+	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, "8080"))
+	if err != nil {
+		log.Debugf("sendCheckAlive: net.Dial returns %v", err)
+		return err
+	}
+
+	// Close the connection when we're done
+	defer conn.Close()
+
+	marshalledData, err = json.Marshal(cmd)
+	if err != nil {
+		log.Debugf("sendCheckAlive: json.Marshal returns %v", err)
+		return err
+	}
+	log.Debugf("sendAlive: marshalledData = %v", string(marshalledData))
+
+	// Send the command to the server
+	err = sendByteArray(conn, marshalledData)
+	if err != nil {
+		return err
+	}
+
+	response, err = receiveResponse(conn)
+	if err != nil {
+		log.Debugf("sendCheckAlive: receiveResponse returns %v", err)
+		// if err != io.EOF {
+		return err
+	}
+	log.Debugf("sendCheckAlive: read: %s", response)
+	log.Debugf("sendCheckAlive: Done!")
+
+	return nil
+}
+
+func sendCreateBastion(serverIP string, cloudName string, serverName string, domainName string) error {
+	var (
+		cmd            CommandCreateBastion
+		marshalledData []byte
+		response       string
+		err            error
+	)
+
+	cmd = CommandCreateBastion{
+		Command:    "create-bastion",
+		CloudName:  cloudName,
+		ServerName: serverName,
+		DomainName: domainName,
+	}
+
+	log.Debugf("sendCreateBastion: serverIP = %s", serverIP)
+
+	// Avoid: address format "%s:%s" does not work with IPv6
+	// Connect to the server
+	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, "8080"))
+	if err != nil {
+		log.Debugf("sendCreateBastion: net.Dial returns %v", err)
+		return err
+	}
+
+	// Close the connection when we're done
+	defer conn.Close()
+
+	marshalledData, err = json.Marshal(cmd)
+	if err != nil {
+		log.Debugf("sendCreateBastion: json.Marshal returns %v", err)
+		return err
+	}
+	log.Debugf("sendCreateBastion: marshalledData = %v", string(marshalledData))
+
+	// Send the command to the server
+	err = sendByteArray(conn, marshalledData)
+	if err != nil {
+		return err
+	}
+
+	response, err = receiveResponse(conn)
+	if err != nil {
+		log.Debugf("sendCreateBastion: receiveResponse returns %v", err)
+		// if err != io.EOF {
+		return err
+	}
+	log.Debugf("sendCreateBastion: read: %s", response)
+	log.Debugf("sendCreateBastion: Done!")
+
+	return nil
 }
 
 func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata bool) error {
@@ -135,59 +247,6 @@ func sendMetadata(metadataFile string, serverIP string, shouldCreateMetadata boo
 	}
 
 	log.Debugf("sendMetadata: Done!")
-
-	return nil
-}
-
-func sendCreateBastion(serverIP string, cloudName string, serverName string, domainName string) error {
-	var (
-		cmd            CommandCreateBastion
-		marshalledData []byte
-		response       string
-		err            error
-	)
-
-	cmd = CommandCreateBastion{
-		Command:    "create-bastion",
-		CloudName:  cloudName,
-		ServerName: serverName,
-		DomainName: domainName,
-	}
-
-	log.Debugf("sendCreateBastion: serverIP = %s", serverIP)
-
-	// Avoid: address format "%s:%s" does not work with IPv6
-	// Connect to the server
-	conn, err := net.Dial("tcp", net.JoinHostPort(serverIP, "8080"))
-	if err != nil {
-		log.Debugf("sendMetadata: net.Dial returns %v", err)
-		return err
-	}
-
-	// Close the connection when we're done
-	defer conn.Close()
-
-	marshalledData, err = json.Marshal(cmd)
-	if err != nil {
-		log.Debugf("sendCreateBastion: json.Marshal returns %v", err)
-		return err
-	}
-	log.Debugf("sendCreateBastion: marshalledData = %v", string(marshalledData))
-
-	// Send the command to the server
-	err = sendByteArray(conn, marshalledData)
-	if err != nil {
-		return err
-	}
-
-	response, err = receiveResponse(conn)
-	if err != nil {
-		log.Debugf("sendCreateBastion: receiveResponse returns %v", err)
-		// if err != io.EOF {
-		return err
-	}
-	log.Debugf("sendCreateBastion: read: %s", response)
-	log.Debugf("sendCreateBastion: Done!")
 
 	return nil
 }
